@@ -14,6 +14,7 @@ Both went through dealflow.approval.state alone, which is why _df_covers()
 now checks the chain, every step, AND the order fingerprint.
 """
 
+from odoo.exceptions import UserError
 from odoo.tests.common import TransactionCase, tagged
 
 
@@ -194,3 +195,104 @@ class TestApprovalBinding(TransactionCase):
         self._walk_chain(approval)
         approval._df_engine().write({"order_fingerprint": False})
         self.assertFalse(approval._df_covers(order))
+
+    # -- a refusal binds too ----------------------------------------------
+    #
+    # The mirror of everything above. An approval only authorises the exact
+    # order it was granted for; symmetrically a rejection only binds the exact
+    # order it was refused for - and it has to bind to SOMETHING, or it costs
+    # the rep one click.
+
+    def _reject_first_step(self, order, reason="Not acceptable, do not resubmit"):
+        step = order.df_approval_id.current_step_id
+        step.with_user(self.manager_user).action_reject(reason)
+        return step
+
+    def test_rejected_quotation_cannot_be_resubmitted_unchanged(self):
+        """Live-reproduced: manager rejects with "Not acceptable, do not
+        resubmit", the rep clicks Confirm again on a byte-identical order, and
+        a brand-new approval chain opens against the same numbers."""
+        order = self._order(20.0)
+        order.action_confirm()
+        rejected_chain = order.df_approval_id
+        self._reject_first_step(order)
+        self.assertEqual(rejected_chain.state, "rejected")
+        chains_before = self.env["dealflow.approval"].search_count(
+            [("order_id", "=", order.id)]
+        )
+
+        with self.assertRaises(UserError) as caught:
+            order.action_confirm()
+
+        self.assertIn("Not acceptable, do not resubmit", str(caught.exception))
+        self.assertEqual(
+            self.env["dealflow.approval"].search_count([("order_id", "=", order.id)]),
+            chains_before,
+            "an unchanged rejected deal must not open a fresh chain",
+        )
+        self.assertEqual(order.df_approval_id, rejected_chain)
+        self.assertNotEqual(order.state, "sale")
+
+    def test_revising_the_deal_lets_it_route_again(self):
+        """The other direction: a rejection binds to the deal that was
+        refused, not to the quotation forever. Genuinely change it and it
+        routes normally - that is what "changes requested" means."""
+        order = self._order(20.0)
+        order.action_confirm()
+        rejected_chain = order.df_approval_id
+        self._reject_first_step(order, "Too deep, come back lower")
+
+        # Still over the ceiling, so it must route - just not the SAME deal.
+        order.order_line.discount = 18.0
+        order.action_confirm()
+
+        self.assertNotEqual(order.df_approval_id, rejected_chain)
+        self.assertEqual(order.df_approval_id.state, "pending")
+        self.assertEqual(rejected_chain.state, "rejected", "history is not rewritten")
+
+    def test_revising_back_within_the_ceiling_confirms_outright(self):
+        """A deal revised all the way back inside its limit needs no approval
+        at all - the rejection must not leave the quotation permanently
+        un-confirmable."""
+        order = self._order(20.0)
+        order.action_confirm()
+        self._reject_first_step(order)
+
+        order.order_line.discount = 0.0
+        order.action_confirm()
+
+        self.assertEqual(order.state, "sale")
+
+    def test_revision_request_also_blocks_an_unchanged_resubmit(self):
+        order = self._order(20.0)
+        order.action_confirm()
+        step = order.df_approval_id.current_step_id
+        step.with_user(self.manager_user).action_request_revision("Justify the discount")
+
+        with self.assertRaises(UserError) as caught:
+            order.action_confirm()
+        self.assertIn("Justify the discount", str(caught.exception))
+
+    def test_rejection_tells_the_rep_on_the_record_they_own(self):
+        """The only chatter entry on a rejected order used to be "Sales Order
+        created". The reason lived solely inside the approval record, which
+        the rep has no reason to open."""
+        order = self._order(20.0)
+        order.action_confirm()
+        messages_before = len(order.message_ids)
+
+        self._reject_first_step(order, "Margin is below floor")
+
+        order.invalidate_recordset(["message_ids", "activity_ids"])
+        self.assertGreater(len(order.message_ids), messages_before)
+        bodies = " ".join(order.message_ids.mapped("body"))
+        self.assertIn("Margin is below floor", bodies)
+        self.assertIn("Rejected by", bodies)
+
+        activities = order.activity_ids.filtered(
+            lambda a: a.user_id == order.user_id
+        )
+        self.assertTrue(
+            activities, "the rep must get a real to-do, not just a chatter line"
+        )
+        self.assertIn("Margin is below floor", activities[0].note or "")

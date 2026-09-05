@@ -240,6 +240,39 @@ class DealflowApproval(models.Model):
             self.order_fingerprint == order.df_governance_fingerprint
         )
 
+    def _df_refusal_step(self):
+        """The step that turned this chain down, if one did."""
+        self.ensure_one()
+        return self.step_ids.filtered(
+            lambda s: s.state in ("rejected", "revision")
+        ).sorted("sequence")[:1]
+
+    def _df_blocks_resubmission(self, order):
+        """Whether this chain forbids `order` being routed for approval again.
+
+        A rejection is a decision about a specific deal, not a speed bump.
+        Live-reproduced: a manager rejected a quotation with the reason "Not
+        acceptable, do not resubmit", the rep pressed Confirm again on a
+        byte-identical order, and a brand-new chain opened against the same
+        numbers - so the rejection cost the rep one click and nothing else, and
+        the same approver got the same deal back with no indication they had
+        already refused it.
+
+        The gate is the governance fingerprint, the same digest _df_covers()
+        uses in the other direction: an approval only authorises the exact
+        order it was granted for, and symmetrically a refusal only binds the
+        exact order it was refused for. Change the discount, the quantity, the
+        pricing or the customer tier and this stops matching, so a genuinely
+        revised deal routes freely - which is the entire point of "changes
+        requested". Resubmitting the identical deal is what is blocked.
+        """
+        self.ensure_one()
+        if self.state not in ("rejected", "revision"):
+            return False
+        return bool(self.order_fingerprint) and (
+            self.order_fingerprint == order.df_governance_fingerprint
+        )
+
     def _supersede(self):
         """Retire a chain whose order has changed underneath it. The decision
         is not reversed (a rejection stays a rejection and is never reopened
@@ -396,6 +429,7 @@ class DealflowApprovalStep(models.Model):
             % {"user": self.env.user.name, "role": self._role_label(), "reason": reason},
         )
         self.approval_id._reject()
+        self.order_id._df_on_approval_refused(self)
         return True
 
     def action_request_revision(self, reason):
@@ -418,4 +452,5 @@ class DealflowApprovalStep(models.Model):
             % {"user": self.env.user.name, "role": self._role_label(), "reason": reason},
         )
         self.approval_id._request_revision()
+        self.order_id._df_on_approval_refused(self)
         return True

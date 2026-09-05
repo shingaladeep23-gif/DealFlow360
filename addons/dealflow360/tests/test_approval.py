@@ -231,12 +231,26 @@ class TestApproval(TransactionCase):
         self.assertEqual(order.df_approval_id.state, "revision")
         self.assertEqual(order.df_pipeline_stage, "draft")
 
-    def test_reconfirm_after_rejection_routes_a_fresh_chain(self):
+    def test_reconfirm_after_rejection_routes_a_fresh_chain_only_once_revised(self):
+        """A rejection binds to the deal that was refused.
+
+        This test used to assert that pressing Confirm again on an untouched
+        rejected quotation opened a fresh chain - which is the bug, not the
+        feature: the rejection cost the rep one click and the same approver
+        got the same numbers back. Re-routing now requires the deal to have
+        actually changed. See dealflow.approval._df_blocks_resubmission.
+        """
         order = self._medium_risk_order()
         self._confirm_expecting_routing(order)
         first_approval = order.df_approval_id
         first_approval.step_ids.with_user(self.manager_user).action_reject("No")
 
+        with self.assertRaises(UserError):
+            order.action_confirm()
+        self.assertEqual(order.df_approval_id.id, first_approval.id)
+
+        # Revise the deal and it routes again, exactly as before.
+        order.order_line[0].discount = order.order_line[0].discount - 1.0
         self._confirm_expecting_routing(order)
         self.assertNotEqual(order.df_approval_id.id, first_approval.id)
         self.assertEqual(order.df_approval_id.state, "pending")

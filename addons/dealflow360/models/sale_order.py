@@ -353,6 +353,31 @@ class SaleOrder(models.Model):
             approval = order.df_approval_id
             if approval and approval._df_covers(order):
                 to_confirm |= order
+            elif approval and approval._df_blocks_resubmission(order):
+                # Refused, and nothing about the deal has changed since. See
+                # dealflow.approval._df_blocks_resubmission: re-routing an
+                # unchanged deal put the same numbers back in front of the same
+                # approver and made the rejection meaningless.
+                step = approval._df_refusal_step()
+                raise UserError(
+                    _(
+                        "%(name)s was %(outcome)s by %(user)s (%(role)s): "
+                        "%(reason)s\n\nNothing has changed on this quotation "
+                        "since. Revise the deal - its discount, quantities or "
+                        "pricing - before submitting it for approval again."
+                    )
+                    % {
+                        "name": order.name,
+                        "outcome": (
+                            _("rejected")
+                            if approval.state == "rejected"
+                            else _("sent back for changes")
+                        ),
+                        "user": step.approver_id.name or _("an approver"),
+                        "role": step._role_label() if step else _("approver"),
+                        "reason": step.reason or _("no reason was given"),
+                    }
+                )
             elif approval.state == "pending" and (
                 approval.order_fingerprint == order.df_governance_fingerprint
             ):
@@ -460,6 +485,60 @@ class SaleOrder(models.Model):
                     "%(customer)s for acceptance."
                 )
                 % {"customer": order.partner_id.display_name},
+            )
+
+    def _df_on_approval_refused(self, step):
+        """Called by dealflow.approval.step when an approver rejects a deal or
+        sends it back for changes. Tells the person who owns the deal.
+
+        The rep was never told anything. Live-reproduced: a manager rejected a
+        quotation with a written reason and the ONLY chatter entry on the order
+        was still "Sales Order created" - no message, no activity, no email.
+        The reason existed solely inside the dealflow.approval record, which
+        the rep has no particular reason to open and, as an approver-owned
+        model, is not on their radar. So the decision was invisible to the one
+        person whose job it is to act on it.
+
+        Two things happen, both of which reach the rep where they already
+        work: a chatter message (mt_comment, so followers are actually
+        notified rather than it landing as a silent internal note), and a real
+        to-do activity in their Odoo inbox carrying the approver's reason.
+
+        sudo() throughout: the actor is a Sales Manager or Finance, who has no
+        write access to the salesperson's quotation. This is the system
+        relaying their decision, exactly as in _df_on_approval_granted.
+        """
+        self.ensure_one()
+        rejected = step.state == "rejected"
+        reason = step.reason or _("No reason was given.")
+        headline = (
+            _("Rejected by %(user)s (%(role)s).")
+            if rejected
+            else _("Changes requested by %(user)s (%(role)s).")
+        ) % {"user": step.approver_id.name, "role": step._role_label()}
+        order_sudo = self.sudo()
+        order_sudo.message_post(
+            body="%s %s %s"
+            % (
+                headline,
+                reason,
+                _(
+                    "This quotation cannot be submitted again as it stands - "
+                    "change the deal first."
+                ),
+            ),
+            message_type="comment",
+            subtype_xmlid="mail.mt_comment",
+        )
+        if self.user_id:
+            order_sudo.activity_schedule(
+                "mail.mail_activity_data_todo",
+                user_id=self.user_id.id,
+                summary=(
+                    _("Rejected: %s") if rejected else _("Changes requested: %s")
+                )
+                % self.name,
+                note="%s %s" % (headline, reason),
             )
 
     def _df_trigger_reapproval(self, negotiation=None):
