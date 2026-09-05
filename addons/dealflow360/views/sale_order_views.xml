@@ -18,6 +18,9 @@
                     <group>
                         <field name="df_margin_pct"/>
                         <field name="df_pipeline_stage"/>
+                        <field name="df_blended_risk_score"/>
+                        <field name="df_risk_level"/>
+                        <field name="df_risk_summary"/>
                     </group>
                 </page>
             </xpath>
