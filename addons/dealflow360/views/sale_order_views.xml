@@ -35,19 +35,22 @@
                  by the engine to be displayed as-is - DF-005 brief says use
                  it rather than re-deriving the sentence here). -->
             <xpath expr="//notebook" position="before">
-                <group col="2" class="o_df_summary_group">
-                    <group string="Live Margin">
-                        <div>
+                <div class="o_df_summary_group">
+                    <div class="o_df_summary_card">
+                        <div class="o_df_summary_label">Live Margin</div>
+                        <div class="o_df_summary_value">
                             <field name="df_margin_pct" nolabel="1" digits="[1,1]"/>%
                         </div>
-                    </group>
-                    <group string="Discount Risk">
+                    </div>
+                    <div class="o_df_summary_card">
+                        <div class="o_df_summary_label">Discount Risk</div>
                         <field name="df_risk_summary" invisible="1"/>
                         <field name="df_risk_level" invisible="1"/>
                         <field name="df_blended_risk_score" widget="dealflow_risk_gauge" nolabel="1"/>
-                    </group>
-                </group>
+                    </div>
+                </div>
                 <div class="o_df_flag_banner" invisible="not df_risk_summary">
+                    <strong>⚠ </strong>
                     <field name="df_risk_summary" nolabel="1" readonly="1"/>
                     — flagged for approval.
                 </div>
