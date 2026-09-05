@@ -38,6 +38,7 @@ export class DealflowApprovalStepActions extends Component {
             approved: "Approved",
             rejected: "Rejected",
             revision: "Revision Requested",
+            superseded: "Superseded by an edit",
         }[this.state];
     }
     get roleLabel() {

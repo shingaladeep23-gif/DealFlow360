@@ -1,6 +1,6 @@
 {
     "name": "DealFlow360",
-    "version": "17.0.1.3.0",
+    "version": "17.0.1.4.0",
     "summary": "Intelligent, self-governing B2B sales operations platform",
     "description": """
 DealFlow360

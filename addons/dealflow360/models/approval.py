@@ -28,12 +28,26 @@ class DealflowApproval(models.Model):
         help="Snapshot of df_risk_level at creation. NONE never reaches this "
         "model - DEC-003's NONE case is auto-approved and never routed.",
     )
+    order_fingerprint = fields.Char(
+        string="Approved Content",
+        readonly=True,
+        copy=False,
+        help="sale.order.df_governance_fingerprint as it stood when this chain "
+        "was routed - i.e. WHAT the approvers were shown. An approval is a "
+        "decision about a specific set of lines, discounts and customer tier, "
+        "not a permanent licence for the quotation to confirm: if the order "
+        "changes afterwards, this no longer matches and the chain is "
+        "superseded. Without it a rep could route a 20% deal, edit it to 60% "
+        "while it sat in the queue, and have the manager approve the stale "
+        "numbers they were shown.",
+    )
     state = fields.Selection(
         [
             ("pending", "Awaiting decision"),
             ("approved", "Approved"),
             ("rejected", "Rejected"),
             ("revision", "Changes requested"),
+            ("superseded", "Superseded by an edit"),
         ],
         string="Status",
         default="pending",
@@ -81,6 +95,7 @@ class DealflowApproval(models.Model):
                 "order_id": order.id,
                 "risk_score": order.df_blended_risk_score,
                 "risk_level": order.df_risk_level,
+                "order_fingerprint": order.df_governance_fingerprint,
                 "step_ids": [
                     (
                         0,
@@ -128,6 +143,49 @@ class DealflowApproval(models.Model):
         self.ensure_one()
         self.state = "revision"
 
+    def _df_covers(self, order):
+        """Whether this chain actually authorises `order` to confirm RIGHT NOW.
+
+        All three conditions are load-bearing and were each independently
+        exploitable before this method existed:
+
+        1. the chain itself is approved;
+        2. EVERY step is approved - `state` alone was not enough, because it
+           is a plain writable column: a Sales Manager could set the chain to
+           'approved' while their own step (or Finance's) was still pending,
+           and the order confirmed on a chain nobody had actually walked;
+        3. the order still looks the way it did when it was approved - see
+           the comment on order_fingerprint.
+        """
+        self.ensure_one()
+        if self.state != "approved":
+            return False
+        if any(step.state != "approved" for step in self.step_ids):
+            return False
+        return bool(self.order_fingerprint) and (
+            self.order_fingerprint == order.df_governance_fingerprint
+        )
+
+    def _supersede(self):
+        """Retire a chain whose order has changed underneath it. The decision
+        is not reversed (a rejection stays a rejection and is never reopened
+        this way) - only an outstanding or still-standing one is retired, so
+        the next confirm attempt routes a fresh chain against the new numbers.
+
+        sudo(): superseding is done BY THE ENGINE in response to an edit, not
+        authored by whoever made the edit - a rep editing their own quotation
+        has no write access to the approval chain, and must not need any.
+        Same reasoning as _create_for_order() and audit_log._log().
+        """
+        self.ensure_one()
+        if self.state not in ("pending", "approved"):
+            return False
+        self.sudo().write({"state": "superseded"})
+        self.step_ids.filtered(
+            lambda s: s.state in ("waiting", "pending")
+        ).sudo().write({"state": "superseded"})
+        return True
+
 
 class DealflowApprovalStep(models.Model):
     _name = "dealflow.approval.step"
@@ -154,6 +212,7 @@ class DealflowApprovalStep(models.Model):
             ("approved", "Approved"),
             ("rejected", "Rejected"),
             ("revision", "Changes requested"),
+            ("superseded", "Superseded by an edit"),
         ],
         string="Status",
         default="waiting",

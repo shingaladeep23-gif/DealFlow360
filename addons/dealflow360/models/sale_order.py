@@ -1,9 +1,15 @@
+import hashlib
 from datetime import timedelta
 
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 
 HEALTH_FLAG_CODES = ("stalled", "discount_anomaly", "approval_delay", "delivery_risk")
+
+# Writing any of these on sale.order changes what an approver would have been
+# looking at, so an outstanding approval chain has to be re-checked against it.
+# (The line-level equivalent lives in models/sale_order_line.py.)
+GOVERNANCE_ORDER_FIELDS = frozenset({"partner_id", "pricelist_id"})
 
 
 class DealflowHealthFlag(models.Model):
@@ -109,6 +115,92 @@ class SaleOrder(models.Model):
                 order.df_pipeline_stage = "negotiation"
             else:
                 order.df_pipeline_stage = "draft"
+
+    df_governance_fingerprint = fields.Char(
+        string="Governance Fingerprint",
+        compute="_compute_df_governance_fingerprint",
+        store=True,
+        copy=False,
+        help="Digest of everything an approval decision actually depends on: "
+        "the customer's discount tier plus every product line's product, "
+        "quantity, unit price and discount. dealflow.approval snapshots this "
+        "at routing time so a decision can be checked against the order it "
+        "was made about - see dealflow.approval.order_fingerprint.",
+    )
+
+    @api.depends(
+        "partner_id.df_tier_id",
+        "order_line.product_id",
+        "order_line.product_uom_qty",
+        "order_line.price_unit",
+        "order_line.discount",
+        "order_line.display_type",
+    )
+    def _compute_df_governance_fingerprint(self):
+        # Sorted, so re-ordering lines is correctly NOT treated as a change;
+        # rounded, so float noise from a recompute cannot spuriously supersede
+        # a live approval chain.
+        for order in self:
+            lines = order.order_line.filtered(
+                lambda l: not l.display_type and l.product_id
+            )
+            payload = repr(
+                (
+                    order.partner_id.df_tier_id.id or 0,
+                    sorted(
+                        (
+                            line.product_id.id,
+                            round(line.product_uom_qty or 0.0, 4),
+                            round(line.price_unit or 0.0, 4),
+                            round(line.discount or 0.0, 4),
+                        )
+                        for line in lines
+                    ),
+                )
+            )
+            order.df_governance_fingerprint = hashlib.sha256(
+                payload.encode("utf-8")
+            ).hexdigest()
+
+    def _df_invalidate_stale_approvals(self):
+        """Retire any approval chain that no longer describes its order.
+
+        Called after every governance-relevant edit (see the create/write/
+        unlink overrides on sale.order.line). This is also what finally makes
+        the problem statement's "all approvals, rejections AND EDITS must be
+        logged with user, timestamp and reason" true: before it, an edit that
+        invalidated a decision left no trace anywhere.
+        """
+        for order in self:
+            approval = order.df_approval_id
+            if not approval or approval.state not in ("pending", "approved"):
+                continue
+            if approval.order_fingerprint == order.df_governance_fingerprint:
+                continue
+            was_approved = approval.state == "approved"
+            if not approval._supersede():
+                continue
+            self.env["dealflow.audit.log"]._log(
+                order,
+                "superseded",
+                _(
+                    "Quotation edited after it was %(status)s, so that "
+                    "decision no longer applies. Discount risk was %(old).1f "
+                    "at routing time and is %(new).1f now; the quotation must "
+                    "be routed for approval again before it can be confirmed."
+                )
+                % {
+                    "status": _("approved") if was_approved else _("sent for approval"),
+                    "old": approval.risk_score,
+                    "new": order.df_blended_risk_score,
+                },
+            )
+
+    def write(self, vals):
+        res = super().write(vals)
+        if GOVERNANCE_ORDER_FIELDS & set(vals):
+            self._df_invalidate_stale_approvals()
+        return res
 
     df_blended_risk_score = fields.Float(
         string="Discount Risk",
@@ -223,6 +315,11 @@ class SaleOrder(models.Model):
         chain is pending; once every step is approved a further Confirm
         click proceeds through native sale.order.action_confirm normally.
         Orders with risk NONE are never touched by this override.
+
+        The green light is dealflow.approval._df_covers(), NOT a bare
+        `state == 'approved'` check. A chain only authorises the order it was
+        actually approved against, with every step genuinely walked - see that
+        method for the two bypasses a bare state check allowed.
         """
         routed = self.env["sale.order"]
         to_confirm = self.env["sale.order"]
@@ -231,9 +328,11 @@ class SaleOrder(models.Model):
                 to_confirm |= order
                 continue
             approval = order.df_approval_id
-            if approval.state == "approved":
+            if approval and approval._df_covers(order):
                 to_confirm |= order
-            elif approval.state == "pending":
+            elif approval.state == "pending" and (
+                approval.order_fingerprint == order.df_governance_fingerprint
+            ):
                 step = approval.current_step_id
                 raise UserError(
                     _("%(name)s cannot be confirmed: it is pending %(role)s approval.")

@@ -18,6 +18,7 @@ class DealflowAuditLog(models.Model):
             ("rejected", "Rejected"),
             ("revision_requested", "Revision Requested"),
             ("reapproval", "Reapproval Triggered"),
+            ("superseded", "Superseded by an Edit"),
         ],
         string="Action",
         required=True,

@@ -1,8 +1,34 @@
 from odoo import api, fields, models
 
+# Editing any of these changes what an approver was looking at, so an
+# outstanding approval chain has to be re-checked against the result. Anything
+# not listed here (qty_delivered, invoice links, analytic distribution, ...) is
+# bookkeeping that no approval decision was ever based on.
+GOVERNANCE_LINE_FIELDS = frozenset(
+    {"product_id", "product_uom_qty", "price_unit", "discount", "display_type"}
+)
+
 
 class SaleOrderLine(models.Model):
     _inherit = "sale.order.line"
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        lines = super().create(vals_list)
+        lines.order_id._df_invalidate_stale_approvals()
+        return lines
+
+    def write(self, vals):
+        res = super().write(vals)
+        if not GOVERNANCE_LINE_FIELDS.isdisjoint(vals):
+            self.order_id._df_invalidate_stale_approvals()
+        return res
+
+    def unlink(self):
+        orders = self.order_id
+        res = super().unlink()
+        orders.exists()._df_invalidate_stale_approvals()
+        return res
 
     df_effective_ceiling = fields.Float(
         string="Discount Limit (%)",
