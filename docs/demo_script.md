@@ -132,6 +132,39 @@ own quotation **200**, another customer's quotation **403**,
 
 ---
 
+## 3b. Multi-warehouse allocation (verified by the integrator)
+
+**Real allocation, computed from real `stock.quant` — not a mock.**
+
+Actual stock in the demo database:
+
+| Warehouse | ProBook Laptop | Docking Station |
+|---|---|---|
+| Main Warehouse | 6 | 25 |
+| East Depot | 4 | 15 |
+
+**S00003** (Beta Industries) orders **15 ProBook** — more than either
+warehouse holds, and more than both hold together. The engine produced
+split **#2** (`shipment_count = 2`, `has_backorder = true`):
+
+| Line | Warehouse | Qty | Backorder |
+|---|---|---|---|
+| ProBook Laptop | **Main Warehouse** | **6** | no |
+| ProBook Laptop | **East Depot** | **4** | no |
+| ProBook Laptop | — | **5** | **yes** |
+
+It drained each warehouse to exactly its real on-hand quantity and turned
+the genuine 5-unit shortfall into a real backorder line. Change the stock
+and the split changes — there are no hardcoded quantities.
+
+Accepting the split (`action_confirm` on the split) creates one real
+`stock.picking` per warehouse with real moves, then reserves via
+`action_assign()`.
+
+**Demo it via DealFlow360 › Fulfillment**, opening the split on S00003.
+
+---
+
 ## 4. Honest status — what to say if asked
 
 **Working and demonstrable**
@@ -143,11 +176,16 @@ own quotation **200**, another customer's quotation **403**,
 - Invoices screens (native `account.move`)
 - Dashboard over real ORM aggregates
 
+**Landed late in the sprint — verified by the integrator**
+- **Warehouse allocation, split fulfillment and backorders (DF-010/011)** —
+  implemented and working against real stock. See §3b below.
+- **Hybrid recurring billing (DF-012)** — `dealflow.recurring.plan` and
+  `dealflow.billing.schedule` models exist on `main` with a billing cron.
+  *Models present and installing cleanly, but the billing cycle was NOT
+  driven end-to-end by the integrator — do not demo it as proven.*
+
 **Not implemented — say so, do not improvise**
-- **Warehouse allocation / split fulfillment / backorders (DF-010/011)** — no
-  allocation models exist. The Fulfillment menu is not backed by an engine.
 - Deal-health scoring cron (DF-017) and the health dashboard (DF-018)
-- Recurring billing / proration (DF-012)
 
 **Test status — the honest, evidenced version.**
 
