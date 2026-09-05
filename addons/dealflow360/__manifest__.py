@@ -35,6 +35,7 @@ and deal health monitoring — built on native Odoo 17 Community models.
         "views/res_config_settings_views.xml",
         "views/dealflow_menus.xml",
         "views/sale_order_kanban_views.xml",
+        "views/portal_templates.xml",
     ],
     "assets": {
         "web.assets_backend": [
