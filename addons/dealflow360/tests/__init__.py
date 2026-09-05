@@ -10,6 +10,7 @@ from . import test_approval_binding
 from . import test_approval_authority
 from . import test_warehouse_split
 from . import test_recurring_billing
+from . import test_confirm_cascade
 from . import test_upsell
 from . import test_deal_health
 from . import test_role_integration

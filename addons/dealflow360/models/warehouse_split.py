@@ -47,7 +47,15 @@ class SaleOrderSplit(models.Model):
 
     def action_confirm(self):
         res = super().action_confirm()
-        for order in self:
+        # ONLY orders that actually confirmed - see the same guard, and the
+        # same reasoning, in models/recurring.py. The governance override in
+        # models/sale_order.py leaves an over-ceiling quotation in 'draft' and
+        # routes it for approval; this loop used to run over ALL of `self`
+        # anyway, so a quotation nobody had approved yet was handed a
+        # fulfillment allocation, and its native procurement was cancelled
+        # (stray_pickings.action_cancel() below) as a side effect of a confirm
+        # that never happened.
+        for order in self.filtered(lambda o: o.state in ("sale", "done")):
             if order.df_split_ids:
                 continue
             fulfillable = order.order_line.filtered(

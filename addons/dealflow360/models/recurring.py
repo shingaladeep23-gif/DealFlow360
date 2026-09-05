@@ -87,12 +87,37 @@ class SaleOrderRecurringBilling(models.Model):
 
     def action_confirm(self):
         res = super().action_confirm()
-        for order in self:
+        # ONLY orders that actually confirmed. Three overrides of
+        # action_confirm() stack on sale.order (models/sale_order.py, then
+        # warehouse_split.py, then this one, in models/__init__.py import
+        # order). The governance override in sale_order.py confirms only the
+        # subset that passed its checks and leaves an over-ceiling quotation
+        # in 'draft', routed for approval - but this loop used to run over
+        # ALL of `self` regardless. Reproduced live: a draft quotation blocked
+        # pending manager AND finance approval had its subscription activated
+        # and a billing schedule written, and the daily cron then posted a real
+        # 999.00 customer invoice against it. `res` is not usable as the
+        # filter here - it is a notification action when anything was routed.
+        for order in self.filtered(lambda o: o.state in ("sale", "done")):
             recurring_lines = order.order_line.filtered(
                 lambda l: not l.display_type and l.product_id.df_is_recurring
             )
             recurring_lines._df_start_subscription()
         return res
+
+    def _get_invoiceable_lines(self, final=False):
+        """A recurring line is billed by its dealflow.billing.schedule, on its
+        own cycle - never by the order's native Create Invoice button.
+
+        Without this the two billing paths overlap and the customer is charged
+        twice for the same subscription: the schedule raises the cycle's
+        invoice, and the order still reports the line as waiting to be
+        invoiced, so pressing Create Invoice bills it again. One-time lines on
+        the same order are untouched, which is the whole point of DF-012's
+        hybrid order.
+        """
+        lines = super()._get_invoiceable_lines(final=final)
+        return lines.filtered(lambda l: not l.product_id.df_is_recurring)
 
 
 class SaleOrderLineSubscription(models.Model):
@@ -157,6 +182,12 @@ class SaleOrderLineSubscription(models.Model):
         today = fields.Date.context_today(self)
         for line in self:
             if not line.product_id.df_is_recurring or line.billing_schedule_ids:
+                continue
+            if line.order_id.state not in ("sale", "done"):
+                # A subscription starts when its order is CONFIRMED. Callers
+                # already filter for that; this is the second lock, because
+                # the cost of getting it wrong is billing a customer for a
+                # quotation nobody accepted.
                 continue
             line.write(
                 {
@@ -347,6 +378,12 @@ class DealflowBillingSchedule(models.Model):
         proration entry is one-off and never queues a successor."""
         self.ensure_one()
         line = self.order_line_id
+        if self.order_id.state not in ("sale", "done"):
+            # Left PENDING on purpose, not cancelled: an order sitting in an
+            # approval queue may well be approved tomorrow, and its schedule
+            # should then bill normally. What must never happen is invoicing
+            # it in the meantime.
+            return False
         if line.df_sub_state != "active":
             self.write({"state": "cancelled"})
             return False
@@ -365,6 +402,9 @@ class DealflowBillingSchedule(models.Model):
                 "invoice_origin": self.order_id.name,
                 "invoice_date": self.date,
                 "currency_id": self.currency_id.id,
+                # Explicit, so the journal is resolved against the ORDER's
+                # company rather than whatever env the cron happens to run in.
+                "company_id": self.order_id.company_id.id,
                 "invoice_line_ids": [
                     (
                         0,
@@ -382,6 +422,17 @@ class DealflowBillingSchedule(models.Model):
                             "product_uom_id": line.product_uom.id,
                             "price_unit": self.amount,
                             "tax_ids": [(6, 0, line.tax_id.ids)],
+                            # sale.order.invoice_ids is derived from
+                            # order_line.invoice_lines.move_id, so without
+                            # this link every subscription invoice was
+                            # orphaned from the order that generated it:
+                            # invisible on the Invoices smart button, and
+                            # invoice_status stuck at 'no' forever. The quick
+                            # test's "record a payment and check the invoice
+                            # status updates" could not pass for a
+                            # subscription. See _compute_invoice_status below
+                            # for what this link must NOT be allowed to imply.
+                            "sale_line_ids": [(6, 0, [line.id])],
                         },
                     )
                 ],

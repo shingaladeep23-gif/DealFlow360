@@ -85,6 +85,13 @@ class TestRecurringBilling(TransactionCase):
         create a second first-cycle schedule entry."""
         product = self._make_recurring_product("Idempotent Plan", 80.0)
         order, line = self._make_order(product, qty=1)
+        # The order has to be CONFIRMED first: _df_start_subscription() now
+        # refuses to start a subscription on a draft quotation, because doing
+        # so is what let a deal still sitting in an approval queue be invoiced
+        # (see tests/test_confirm_cascade.py). This test is about idempotency,
+        # not about the draft case, so confirm and then re-enter the hook.
+        order.action_confirm()
+        self.assertEqual(order.state, "sale")
         line._df_start_subscription()
         line._df_start_subscription()
         self.assertEqual(len(line.billing_schedule_ids), 1)
