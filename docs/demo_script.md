@@ -23,22 +23,23 @@ If the stack is cold, `docker compose up -d` then wait for `/web/login` to answe
 
 ## 1. Demo data already in the database
 
-| Order | Deal | Total | Risk | Level | Stage |
+| Order | Deal | Total | Risk | Stage | Role in the demo |
 |---|---|---|---|---|---|
-| S00001 | Acme — standard refresh | 11,400.00 | **0** | none | draft |
-| S00002 | Acme — Q4 expansion | 38,040.00 | **100** | high | **confirmed** |
-| S00003 | Beta Industries — platform rollout | 26,148.60 | **52.8** | high | draft |
-| S00016 | **Acme — Q1 fleet refresh (LIVE DEMO DEAL)** | 34,164.00 | **100** | high | **draft** |
+| S00001 | Acme — standard refresh | 11,400.00 | **0** none | draft | the clean deal — governance stays out of the way |
+| S00002 | Acme — Q4 expansion | 38,040.00 | **100** high | confirmed | proof the approval cycle completes |
+| S00003 | Beta Industries — platform rollout | 22,491.00 | **100** high | confirmed | proof of fulfillment: real 2-warehouse split + backorder |
+| **S00016** | **Acme — Q1 fleet refresh** | 34,164.00 | **100** high | **draft** | **drive this one live** |
 
-Every risk number above is computed by the engine from line discounts against
+Every risk number is computed by the engine from line discounts against
 category/tier ceilings. None are stored constants.
 
 Supporting records: Acme Corp, Beta Industries · ProBook Laptop (1200),
 Docking Station (150), Onsite Setup Service (300), Core Plan (999) ·
-Main Warehouse, East Depot · Bronze / Silver / Gold discount tiers.
+Main Warehouse, East Depot · Bronze / Silver / Gold discount tiers ·
+3 recurring plans · 6 audit-log entries · 2 posted invoices.
 
-**S00002 is deliberately left confirmed** — it is the proof that the whole
-approval cycle completes. **S00016 is the deal to drive live.**
+**Leave S00001, S00002 and S00003 as they are** — each one evidences a
+different pillar. **S00016 is the only deal to touch during the demo.**
 
 ---
 
