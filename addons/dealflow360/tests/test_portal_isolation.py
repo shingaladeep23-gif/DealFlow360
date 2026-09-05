@@ -108,3 +108,19 @@ class TestPortalIsolation(TransactionCase):
             .search_read([("id", "=", negotiation.id)], ["counter_discount"])
         )
         self.assertFalse(rows)
+
+    def test_portal_user_cannot_write_any_negotiation_via_orm(self):
+        """Every mutation goes through controllers/portal.py's validated
+        sudo() calls - a portal user must never be able to write a
+        dealflow.negotiation directly, not even their own (perm_write=0)."""
+        own_negotiation = self.env["dealflow.negotiation"].sudo().create(
+            {"order_id": self.acme_order.id, "counter_discount": 5.0}
+        )
+        with self.assertRaises(AccessError):
+            own_negotiation.with_user(self.acme_user).write({"counter_discount": 50.0})
+
+    def test_portal_user_cannot_create_negotiation_via_orm(self):
+        with self.assertRaises(AccessError):
+            self.env["dealflow.negotiation"].with_user(self.acme_user).create(
+                {"order_id": self.acme_order.id, "counter_discount": 5.0}
+            )
