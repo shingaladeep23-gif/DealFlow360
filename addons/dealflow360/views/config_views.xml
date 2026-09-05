@@ -110,6 +110,21 @@
         <field name="view_mode">tree,form</field>
     </record>
 
+    <!-- A4: "Configure stock levels and replenishment rules per warehouse".
+         Reordering rules are Odoo's own model, so this points at the native
+         action rather than rebuilding it. -->
+    <record id="action_dealflow_reordering_rules" model="ir.actions.act_window">
+        <field name="name">Replenishment Rules</field>
+        <field name="res_model">stock.warehouse.orderpoint</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No replenishment rules yet.</p>
+            <p>A rule keeps a product topped up at a warehouse. The fulfillment
+               engine allocates from whatever stock actually exists, so these
+               rules are what stop a product being permanently backordered.</p>
+        </field>
+    </record>
+
     <!-- Menus -->
     <menuitem id="menu_dealflow_recurring_plans" name="Recurring Plans"
               parent="menu_dealflow_configuration"
@@ -122,6 +137,10 @@
     <menuitem id="menu_dealflow_warehouses" name="Warehouses"
               parent="menu_dealflow_configuration"
               action="action_dealflow_warehouses" sequence="50"
+              groups="group_dealflow_admin"/>
+    <menuitem id="menu_dealflow_reordering_rules" name="Replenishment Rules"
+              parent="menu_dealflow_configuration"
+              action="action_dealflow_reordering_rules" sequence="55"
               groups="group_dealflow_admin"/>
     <menuitem id="menu_dealflow_pricelists" name="Price Lists"
               parent="menu_dealflow_configuration"

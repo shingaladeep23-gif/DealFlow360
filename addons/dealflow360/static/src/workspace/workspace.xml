@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.Workspace">
+        <div class="o_df_workspace">
+            <div class="o_df_workspace_bar">
+                <div class="o_df_workspace_nav">
+                    <button class="o_df_workspace_tab"
+                            t-att-class="{ 'o_df_workspace_tab_active': state.tab === 'quotations' }"
+                            t-on-click="() => this.setTab('quotations')">Quotations</button>
+                    <button class="o_df_workspace_tab"
+                            t-att-class="{ 'o_df_workspace_tab_active': state.tab === 'pipeline' }"
+                            t-on-click="() => this.setTab('pipeline')">Pipeline</button>
+                </div>
+                <div class="o_df_workspace_actions">
+                    <button class="btn btn-sm btn-secondary" t-att-disabled="state.reloading"
+                            t-on-click="reloadData">
+                        <t t-if="state.reloading">Reloading…</t>
+                        <t t-else="">Reload Data</t>
+                    </button>
+                    <button class="btn btn-sm btn-secondary" t-on-click="goToBackend">Go to Back-end</button>
+                    <button class="btn btn-sm btn-light" t-on-click="closeWorkspace">Close Workspace</button>
+                </div>
+            </div>
+
+            <div t-if="state.loading" class="o_df_placeholder_panel">Loading…</div>
+
+            <t t-else="">
+                <t t-if="state.tab === 'quotations'">
+                    <div class="o_df_workspace_header">
+                        <div>
+                            <h2>Quotations</h2>
+                            <p class="o_df_screen_hint">Active and draft deals. Pick one to open its builder.</p>
+                        </div>
+                        <button class="btn btn-primary" t-on-click="newQuotation">New quotation</button>
+                    </div>
+                    <div t-if="!quotations.length" class="o_df_placeholder_panel">
+                        Nothing open right now — create a quotation to get started.
+                    </div>
+                    <div t-else="" class="o_df_workspace_cards">
+                        <div t-foreach="quotations" t-as="order" t-key="order.id"
+                             t-attf-class="o_df_workspace_card o_df_risk_#{order.df_risk_level}"
+                             t-on-click="() => this.openOrder(order.id)">
+                            <div class="o_df_workspace_card_top">
+                                <strong t-esc="order.name"/>
+                                <span t-attf-class="o_df_risk_badge o_df_risk_badge_#{order.df_risk_level}"
+                                      t-esc="order.riskLabel"/>
+                            </div>
+                            <div class="o_df_workspace_card_customer" t-esc="order.partner_id[1]"/>
+                            <div class="o_df_workspace_card_bottom">
+                                <span class="o_df_workspace_card_amount" t-esc="order.amountLabel"/>
+                                <span class="text-muted">
+                                    Margin <t t-esc="order.df_margin_pct.toFixed(1)"/>%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <t t-else="">
+                    <div class="o_df_workspace_header">
+                        <div>
+                            <h2>Pipeline</h2>
+                            <p class="o_df_screen_hint">Where every open deal stands. Columns come from the deal's own stage, not a separate guess.</p>
+                        </div>
+                    </div>
+                    <div class="o_df_pipeline">
+                        <div t-foreach="stages" t-as="stage" t-key="stage.key" class="o_df_pipeline_column">
+                            <div class="o_df_pipeline_column_head">
+                                <span t-esc="stage.label"/>
+                                <span class="o_df_pipeline_count" t-esc="ordersInStage(stage.key).length"/>
+                            </div>
+                            <div t-foreach="ordersInStage(stage.key)" t-as="order" t-key="order.id"
+                                 t-attf-class="o_df_pipeline_card o_df_risk_#{order.df_risk_level}"
+                                 t-on-click="() => this.openOrder(order.id)">
+                                <strong t-esc="order.name"/>
+                                <div class="o_df_workspace_card_customer" t-esc="order.partner_id[1]"/>
+                                <div class="o_df_workspace_card_amount" t-esc="order.amountLabel"/>
+                            </div>
+                            <div t-if="!ordersInStage(stage.key).length" class="o_df_pipeline_empty">—</div>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </div>
+    </t>
+</templates>

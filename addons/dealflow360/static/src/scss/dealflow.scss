@@ -505,3 +505,163 @@
         text-decoration: underline;
     }
 }
+
+// B1 - the Sales Workspace. Its own top bar (Quotations / Pipeline plus the
+// three session actions) so the rep experience reads as a workspace rather
+// than another list behind the stock Odoo menu.
+.o_df_workspace {
+    padding: 0 0 32px;
+
+    .o_df_workspace_bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 10px 32px;
+        background-color: #fff;
+        border-bottom: 1px solid #e2e5e9;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .o_df_workspace_nav {
+        display: flex;
+        gap: 4px;
+    }
+
+    .o_df_workspace_tab {
+        border: 0;
+        background: transparent;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-weight: 600;
+        color: #6c757d;
+
+        &:hover { background-color: #f1f2f4; color: #343a40; }
+    }
+
+    .o_df_workspace_tab_active {
+        background-color: #eef1ff;
+        color: #3a5ce0;
+    }
+
+    .o_df_workspace_actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .o_df_workspace_header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 24px 32px 12px;
+
+        h2 { margin: 0; font-weight: 600; }
+    }
+
+    .o_df_placeholder_panel { margin: 0 32px; }
+}
+
+.o_df_workspace_cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    padding: 0 32px;
+}
+
+.o_df_workspace_card {
+    background-color: #fff;
+    border: 1px solid #e2e5e9;
+    border-left: 3px solid #ced4da;
+    border-radius: 8px;
+    padding: 14px 16px;
+    cursor: pointer;
+
+    &:hover { border-color: #4a6cf7; }
+
+    &.o_df_risk_medium { border-left-color: #ffc107; }
+    &.o_df_risk_high { border-left-color: #dc3545; }
+    &.o_df_risk_none { border-left-color: #28a745; }
+}
+
+.o_df_workspace_card_top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.o_df_workspace_card_customer {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+}
+
+.o_df_workspace_card_bottom {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.o_df_workspace_card_amount { font-weight: 600; }
+
+.o_df_pipeline {
+    display: flex;
+    gap: 12px;
+    padding: 0 32px;
+    overflow-x: auto;
+}
+
+.o_df_pipeline_column {
+    flex: 0 0 240px;
+    background-color: #f1f2f4;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.o_df_pipeline_column_head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #6c757d;
+    margin-bottom: 8px;
+}
+
+.o_df_pipeline_count {
+    background-color: #fff;
+    border-radius: 10px;
+    padding: 0 8px;
+    font-size: 0.8rem;
+}
+
+.o_df_pipeline_card {
+    background-color: #fff;
+    border-radius: 6px;
+    border-left: 3px solid #ced4da;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+
+    &:hover { box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12); }
+
+    &.o_df_risk_medium { border-left-color: #ffc107; }
+    &.o_df_risk_high { border-left-color: #dc3545; }
+    &.o_df_risk_none { border-left-color: #28a745; }
+}
+
+.o_df_pipeline_empty {
+    color: #adb5bd;
+    text-align: center;
+    padding: 8px 0;
+}

@@ -243,3 +243,150 @@ class TestSpecScreens(TransactionCase):
             "form"
         ]["arch"]
         self.assertIn("df_shipping_cost_weight", arch)
+
+
+@tagged("post_install", "-at_install")
+class TestWorkspaceAndAlerts(TransactionCase):
+    """B1's Sales Workspace, B9's nudge/escalate, and A7's PDF half - the
+    remaining spec surfaces that had nothing behind them."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.acme = cls.env["res.partner"].search([("name", "=", "Acme Corp")], limit=1)
+        cls.services = cls.env.ref("dealflow360.product_category_services")
+        cls.rep = cls.env["res.users"].create(
+            {
+                "name": "Workspace Rep",
+                "login": "workspace_rep@dealflow360.test",
+                "email": "workspace_rep@dealflow360.test",
+                "groups_id": [
+                    (6, 0, [cls.env.ref("dealflow360.group_dealflow_sales_rep").id])
+                ],
+            }
+        )
+        cls.manager = cls.env["res.users"].create(
+            {
+                "name": "Workspace Manager",
+                "login": "workspace_manager@dealflow360.test",
+                "email": "workspace_manager@dealflow360.test",
+                "groups_id": [
+                    (6, 0, [cls.env.ref("dealflow360.group_dealflow_sales_manager").id])
+                ],
+            }
+        )
+        cls.service = cls.env["product.product"].create(
+            {
+                "name": "Workspace Service",
+                "categ_id": cls.services.id,
+                "type": "service",
+                "list_price": 500.0,
+                "standard_price": 300.0,
+            }
+        )
+
+    def _order(self, discount=0.0):
+        return self.env["sale.order"].create(
+            {
+                "partner_id": self.acme.id,
+                "user_id": self.rep.id,
+                "order_line": [
+                    (
+                        0,
+                        0,
+                        {
+                            "product_id": self.service.id,
+                            "product_uom_qty": 2,
+                            "discount": discount,
+                        },
+                    )
+                ],
+            }
+        )
+
+    # -- B1 ---------------------------------------------------------------
+
+    def test_workspace_action_and_menu_exist(self):
+        action = self.env.ref("dealflow360.action_dealflow_workspace")
+        self.assertEqual(action.tag, "dealflow_workspace")
+        self.assertTrue(self.env.ref("dealflow360.menu_dealflow_workspace").active)
+
+    def test_reload_data_actually_refreshes_something(self):
+        """B1 calls it "Refreshes pricing, stock and approval data". Deal
+        health is the part that genuinely goes stale, so this must really
+        recompute it, not just re-render the client."""
+        order = self._order()
+        self.assertFalse(order.df_health_status, "precondition: not scored yet")
+
+        result = self.env["sale.order"].with_user(self.rep).action_df_reload_workspace_data()
+
+        self.assertGreater(result["orders_refreshed"], 0)
+        self.assertIn("at_risk", result)
+        order.invalidate_recordset()
+        self.assertTrue(
+            order.df_health_status, "a reload must leave the deal actually scored"
+        )
+
+    def test_workspace_targets_resolve(self):
+        """Go to Back-end and Close Workspace both doAction on an xmlid; a
+        typo there is only visible at click time."""
+        self.assertTrue(self.env.ref("dealflow360.action_dealflow_discount_tier"))
+        self.assertTrue(self.env.ref("dealflow360.action_dealflow_dashboard"))
+
+    # -- B9 ---------------------------------------------------------------
+
+    def test_nudge_schedules_a_real_activity_for_the_owner(self):
+        order = self._order()
+        order.sudo()._compute_deal_health()
+        before = len(order.message_ids)
+
+        order.with_user(self.manager).action_df_nudge()
+
+        activity = self.env["mail.activity"].search(
+            [("res_model", "=", "sale.order"), ("res_id", "=", order.id)]
+        )
+        self.assertTrue(activity, "a nudge must land in someone's actual inbox")
+        self.assertEqual(activity.user_id, self.rep)
+        self.assertGreater(len(order.message_ids), before)
+
+    def test_escalation_goes_to_someone_other_than_the_owner(self):
+        order = self._order()
+        order.sudo()._compute_deal_health()
+
+        order.with_user(self.manager).action_df_escalate()
+
+        activity = self.env["mail.activity"].search(
+            [("res_model", "=", "sale.order"), ("res_id", "=", order.id)]
+        )
+        self.assertTrue(activity)
+        self.assertNotEqual(
+            activity.user_id,
+            self.rep,
+            "escalating to the person who already owns it is not an escalation",
+        )
+
+    def test_nudge_without_a_salesperson_is_refused(self):
+        from odoo.exceptions import UserError
+
+        order = self._order()
+        order.user_id = False
+        with self.assertRaises(UserError):
+            order.action_df_nudge()
+
+    # -- A7's PDF ---------------------------------------------------------
+
+    def test_deal_summary_report_renders(self):
+        """A QWeb template only fails when something actually renders it."""
+        order = self._order(discount=40.0)
+        order.action_confirm()
+        order.df_approval_id.current_step_id.with_user(
+            self.manager
+        ).action_approve("fine")
+
+        html = self.env["ir.actions.report"]._render_qweb_html(
+            "dealflow360.report_deal_summary", order.ids
+        )[0]
+        text = html.decode() if isinstance(html, bytes) else html
+        self.assertIn(order.name, text)
+        self.assertIn("Deal Governance Summary", text)
+        self.assertIn("Audit trail", text)

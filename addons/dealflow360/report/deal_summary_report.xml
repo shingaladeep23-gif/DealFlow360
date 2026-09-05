@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- A7's other export format. XLS is Odoo's native "Download xlsx" on the
+         reporting pivot and list; PDF was previously only the stock quotation
+         printout, which shows a customer their prices and nothing about how
+         the deal was governed. This is the internal counterpart: what was
+         discounted, past which limit, who signed it off and when - i.e. the
+         audit trail as a document you can hand to someone.
+
+         Deliberately NOT sent to the customer: it carries margin, the blended
+         risk score and approval-chain internals, all of which AT-08 keeps off
+         the portal. -->
+    <record id="action_report_deal_summary" model="ir.actions.report">
+        <field name="name">Deal Governance Summary</field>
+        <field name="model">sale.order</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">dealflow360.report_deal_summary</field>
+        <field name="report_file">dealflow360.report_deal_summary</field>
+        <field name="binding_model_id" ref="sale.model_sale_order"/>
+        <field name="binding_type">report</field>
+        <field name="print_report_name">'Deal Summary - %s' % (object.name)</field>
+        <field name="groups_id" eval="[(4, ref('group_dealflow_sales_rep')), (4, ref('group_dealflow_finance'))]"/>
+    </record>
+
+    <template id="report_deal_summary_document">
+        <t t-call="web.external_layout">
+            <div class="page">
+                <h2>Deal Governance Summary</h2>
+                <h3 t-field="doc.name"/>
+
+                <div class="row mt32 mb32">
+                    <div class="col-6">
+                        <strong>Customer:</strong> <span t-field="doc.partner_id"/><br/>
+                        <strong>Discount tier:</strong>
+                        <span t-if="doc.partner_id.df_tier_id" t-field="doc.partner_id.df_tier_id.name"/>
+                        <span t-else="">Not set</span><br/>
+                        <strong>Salesperson:</strong> <span t-field="doc.user_id"/>
+                    </div>
+                    <div class="col-6">
+                        <strong>Order date:</strong> <span t-field="doc.date_order"/><br/>
+                        <strong>Status:</strong> <span t-field="doc.state"/><br/>
+                        <strong>Total:</strong>
+                        <span t-field="doc.amount_total"
+                              t-options="{'widget': 'monetary', 'display_currency': doc.currency_id}"/>
+                    </div>
+                </div>
+
+                <h4>Discount governance</h4>
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th class="text-end">Qty</th>
+                            <th class="text-end">Discount</th>
+                            <th class="text-end">Limit</th>
+                            <th class="text-end">Over by</th>
+                            <th class="text-end">Margin</th>
+                            <th class="text-end">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="doc.order_line.filtered(lambda l: not l.display_type and l.product_id)"
+                            t-as="line">
+                            <td><span t-field="line.product_id"/></td>
+                            <td class="text-end"><span t-field="line.product_uom_qty"/></td>
+                            <td class="text-end"><span t-esc="'%.1f' % line.discount"/>%</td>
+                            <td class="text-end"><span t-esc="'%.1f' % line.df_effective_ceiling"/>%</td>
+                            <td class="text-end">
+                                <strong t-if="line.df_excess_points &gt; 0"
+                                        t-esc="'%.1f' % line.df_excess_points"/>
+                                <span t-else="">—</span>
+                            </td>
+                            <td class="text-end"><span t-esc="'%.1f' % line.df_margin_pct"/>%</td>
+                            <td class="text-end">
+                                <span t-field="line.price_subtotal"
+                                      t-options="{'widget': 'monetary', 'display_currency': doc.currency_id}"/>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <p>
+                    <strong>Blended discount risk:</strong>
+                    <span t-esc="'%.1f' % doc.df_blended_risk_score"/> —
+                    <span t-field="doc.df_risk_level"/><br/>
+                    <span t-if="doc.df_risk_summary" t-field="doc.df_risk_summary"/>
+                </p>
+
+                <div t-if="doc.df_approval_id">
+                    <h4>Approval chain</h4>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Step</th>
+                                <th>Decision</th>
+                                <th>By</th>
+                                <th>When</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="doc.df_approval_id.step_ids.sorted('sequence')" t-as="step">
+                                <td><span t-field="step.role"/></td>
+                                <td><span t-field="step.state"/></td>
+                                <td><span t-field="step.approver_id"/></td>
+                                <td><span t-field="step.acted_on"/></td>
+                                <td><span t-field="step.reason"/></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div t-if="doc.df_audit_log_ids">
+                    <h4>Audit trail</h4>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>When</th>
+                                <th>Who</th>
+                                <th>What</th>
+                                <th>Detail</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="doc.df_audit_log_ids.sorted('timestamp')" t-as="entry">
+                                <td><span t-field="entry.timestamp"/></td>
+                                <td><span t-field="entry.user_id"/></td>
+                                <td><span t-field="entry.action"/></td>
+                                <td><span t-field="entry.detail"/></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div t-if="doc.df_recurring_line_ids">
+                    <h4>Subscriptions on this order</h4>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Status</th>
+                                <th>Next bill</th>
+                                <th class="text-end">MRR</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="doc.df_recurring_line_ids" t-as="sub">
+                                <td><span t-field="sub.product_id"/></td>
+                                <td><span t-field="sub.df_sub_state"/></td>
+                                <td><span t-field="sub.df_sub_next_bill_date"/></td>
+                                <td class="text-end">
+                                    <span t-field="sub.df_mrr"
+                                          t-options="{'widget': 'monetary', 'display_currency': doc.currency_id}"/>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </t>
+    </template>
+
+    <template id="report_deal_summary">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="doc">
+                <t t-call="dealflow360.report_deal_summary_document"/>
+            </t>
+        </t>
+    </template>
+</odoo>

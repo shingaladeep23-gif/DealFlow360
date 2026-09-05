@@ -656,6 +656,118 @@ class SaleOrder(models.Model):
         self.sudo()._compute_deal_health()
         return True
 
+    # -- B9: acting on an alert ------------------------------------------
+    #
+    # "An automated nudge or escalation action can be triggered from an
+    # alert." The Deal Health screen could show a stalled or at-risk deal and
+    # then offered nothing to DO about it, which is most of the point of
+    # monitoring one.
+
+    def _df_escalation_user(self):
+        """Who a deal escalates TO: the sales team's leader, falling back to
+        any Sales Manager. Never the rep who already owns the deal - that is
+        a nudge, not an escalation."""
+        self.ensure_one()
+        leader = self.team_id.user_id
+        if leader and leader != self.user_id:
+            return leader
+        group = self.env.ref(
+            "dealflow360.group_dealflow_sales_manager", raise_if_not_found=False
+        )
+        if group:
+            candidates = group.users.filtered(lambda u: u != self.user_id)
+            if candidates:
+                return candidates[0]
+        return self.env["res.users"]
+
+    def action_df_nudge(self):
+        """Ask the deal's owner to move it on: a real chatter message plus a
+        real scheduled activity in their Odoo inbox, not a notification that
+        vanishes on refresh."""
+        for order in self:
+            if not order.user_id:
+                raise UserError(
+                    _("%s has no salesperson to nudge.") % order.name
+                )
+            reason = order.df_health_reason or _("This deal needs attention.")
+            order.activity_schedule(
+                "mail.mail_activity_data_todo",
+                user_id=order.user_id.id,
+                summary=_("Follow up on %s") % order.name,
+                note=reason,
+            )
+            order.message_post(
+                body=_("%(user)s nudged %(owner)s to follow this deal up. %(reason)s")
+                % {
+                    "user": self.env.user.name,
+                    "owner": order.user_id.name,
+                    "reason": reason,
+                },
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        return True
+
+    def action_df_escalate(self):
+        """Put the deal in front of someone senior, with the health engine's
+        own reasoning attached."""
+        for order in self:
+            target = order._df_escalation_user()
+            if not target:
+                raise UserError(
+                    _(
+                        "There is nobody to escalate %s to - no sales team "
+                        "leader and no other sales manager."
+                    )
+                    % order.name
+                )
+            reason = order.df_health_reason or _("Flagged as at risk.")
+            order.activity_schedule(
+                "mail.mail_activity_data_todo",
+                user_id=target.id,
+                summary=_("Escalated: %s") % order.name,
+                note=reason,
+            )
+            order.message_post(
+                body=_(
+                    "%(user)s escalated this deal to %(target)s. %(reason)s"
+                )
+                % {
+                    "user": self.env.user.name,
+                    "target": target.name,
+                    "reason": reason,
+                },
+                message_type="comment",
+                subtype_xmlid="mail.mt_comment",
+            )
+        return True
+
+    # -- B1: the rep workspace's "Reload Data" ----------------------------
+
+    @api.model
+    def action_df_reload_workspace_data(self):
+        """B1's Reload Data: "Refreshes pricing, stock and approval data from
+        the backend."
+
+        A real refresh, not a client-side re-render dressed up as one. Deal
+        health is the one thing on the workspace that genuinely goes stale
+        without work being done - two of its four signals are functions of
+        wall-clock time (see the note above _compute_deal_health), and the
+        stock-shortfall signal re-reads live stock.quant. Prices and approval
+        state are stored computes that Odoo keeps current on their own, so
+        this deliberately does not pretend to "recompute" them.
+        """
+        orders = self.search([("state", "in", ("draft", "sent", "sale"))])
+        # sudo(): df_health_* are engine-owned readonly fields, same reasoning
+        # as action_df_refresh_health.
+        orders.sudo()._compute_deal_health()
+        return {
+            "orders_refreshed": len(orders),
+            "at_risk": len(
+                orders.filtered(lambda o: o.df_health_status in ("at_risk", "critical"))
+            ),
+        }
+
     @api.model
     def _cron_compute_deal_health(self):
         """DF-017 scheduled action: refresh deal health for every open

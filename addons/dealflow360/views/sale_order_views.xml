@@ -72,6 +72,12 @@
                             <span invisible="df_health_status">Not scored yet</span>
                             <button name="action_df_refresh_health" type="object"
                                     string="Check now" class="btn btn-link btn-sm o_df_inline_btn"/>
+                            <button name="action_df_nudge" type="object"
+                                    string="Nudge owner" class="btn btn-link btn-sm o_df_inline_btn"
+                                    invisible="not df_health_status"/>
+                            <button name="action_df_escalate" type="object"
+                                    string="Escalate" class="btn btn-link btn-sm o_df_inline_btn"
+                                    invisible="df_health_status not in ('at_risk', 'critical')"/>
                         </div>
                     </div>
                 </div>

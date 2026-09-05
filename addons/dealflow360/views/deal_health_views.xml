@@ -34,6 +34,14 @@
                 <field name="df_last_activity" string="Last activity"/>
                 <field name="df_risk_level" widget="label_selection"
                        options="{'classes': {'none': 'success', 'medium': 'warning', 'high': 'danger'}}"/>
+                <!-- B9: "an automated nudge or escalation action can be
+                     triggered from an alert". The screen used to show the
+                     problem and offer nothing to do about it. -->
+                <button name="action_df_nudge" type="object" string="Nudge"
+                        icon="fa-bell" invisible="not df_health_status"/>
+                <button name="action_df_escalate" type="object" string="Escalate"
+                        icon="fa-level-up"
+                        invisible="df_health_status not in ('at_risk', 'critical')"/>
             </tree>
         </field>
     </record>

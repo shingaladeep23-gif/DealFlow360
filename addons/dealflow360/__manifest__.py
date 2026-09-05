@@ -22,6 +22,11 @@ and deal health monitoring — built on native Odoo 17 Community models.
         "stock",
         "account",
         "portal",
+        # A1: "Internal users can sign up and log in with standard
+        # credentials", and customers reach their quotation through a portal
+        # login. auth_signup is what provides /web/signup and the portal
+        # invitation/reset flow; without it neither was reachable at all.
+        "auth_signup",
     ],
     "data": [
         "security/dealflow_security.xml",
@@ -50,6 +55,7 @@ and deal health monitoring — built on native Odoo 17 Community models.
         "views/portal_templates.xml",
         "views/invoice_views.xml",
         "views/report_views.xml",
+        "report/deal_summary_report.xml",
     ],
     "assets": {
         "web.assets_backend": [
@@ -57,6 +63,8 @@ and deal health monitoring — built on native Odoo 17 Community models.
             "dealflow360/static/src/fields/risk_gauge/risk_gauge.xml",
             "dealflow360/static/src/fields/invoice_stepper/invoice_stepper.js",
             "dealflow360/static/src/fields/invoice_stepper/invoice_stepper.xml",
+            "dealflow360/static/src/workspace/workspace.js",
+            "dealflow360/static/src/workspace/workspace.xml",
             "dealflow360/static/src/dashboard/dashboard.js",
             "dealflow360/static/src/dashboard/dashboard.xml",
             "dealflow360/static/src/fields/approval_stepper/approval_stepper.js",
