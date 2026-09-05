@@ -12,16 +12,18 @@
         <field name="arch" type="xml">
             <form string="Fulfillment">
                 <header>
+                    <button name="action_generate_split" type="object" string="Regenerate Suggestion"
+                            invisible="state == 'confirmed'"/>
                     <button name="action_confirm" type="object" string="Accept Suggested Split"
                             class="btn-primary" invisible="state == 'confirmed'"/>
+                    <button name="action_consolidate_backorder" type="object" string="Consolidate Backorder"
+                            invisible="state != 'confirmed' or not has_backorder"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,confirmed"/>
                 </header>
                 <sheet>
-                    <div class="alert alert-warning" role="alert" invisible="not df_recommendation_note">
-                        <field name="df_recommendation_note" nolabel="1"/>
-                    </div>
                     <group>
                         <field name="order_id" readonly="1"/>
+                        <field name="partner_id" readonly="1"/>
                         <field name="shipment_count" readonly="1"/>
                         <field name="has_backorder" readonly="1"/>
                     </group>
@@ -32,7 +34,13 @@
                             <field name="qty"/>
                             <field name="df_estimated_cost"/>
                             <field name="is_backorder" widget="boolean_toggle"/>
-                            <field name="picking_id" readonly="1"/>
+                        </tree>
+                    </field>
+                    <field name="picking_ids" readonly="1">
+                        <tree string="Deliveries">
+                            <field name="name"/>
+                            <field name="picking_type_id"/>
+                            <field name="state"/>
                         </tree>
                     </field>
                 </sheet>
