@@ -6,6 +6,63 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-001c — Live install verification, one real bug found and fixed — Atlas — 2026-09-05
+
+Docker Desktop's Linux engine came back after the human rebooted (root cause: `VirtualMachinePlatform` was stuck `EnablePending`, fixed by restart — not an Odoo/addon issue). This entry closes out DF-001's open verification with real results instead of speculation, and replaces the "Known issues" list in the DF-001 entry below (kept for history, but treat this entry as current truth).
+
+**Completed work**
+- `git pull origin main`, `docker compose up -d` — both containers came up healthy (`dealflow360-db-1`, `dealflow360-odoo-1`), port 8069 reachable.
+- First install attempt failed on a **stale `dealflow360` database left over from before the Docker outage** (`duplicate key value violates unique constraint "pg_type_typname_nsp_index"` in Odoo's own base SQL bootstrap) — unrelated to our module; fixed by terminating the stale connection and `DROP DATABASE dealflow360`, not a code change.
+- Second install attempt found one real bug: **`product.template.is_storable` does not exist on Odoo 17.0** — confirmed by the traceback itself (`ValueError: Invalid field 'is_storable' on model 'product.template'`) when `demo/demo_data.py` tried to create ProBook Laptop / Docking Station. God's suspicion was correct: **Odoo 17.0 Community uses `type='product'`** for storable goods; `is_storable` (as a field alongside `type='consu'`) is an Odoo 18 concept. Fixed both product creations in `demo/demo_data.py` to use `type='product'` and dropped the `is_storable` key entirely.
+- Reinstalled into a clean database — **module loads with zero errors**: `Module dealflow360 loaded in 3.03s`, full stack `60 modules loaded in 69.52s ... Registry loaded in 88.820s`, no `ERROR`/`CRITICAL` lines anywhere in the log (the only log noise — a docutils `Unexpected indentation` / `Block quote` notice — happens during core `mail` module loading, before `dealflow360` even starts, and is pre-existing Odoo-core RST-description noise unrelated to our module).
+- Ran `docker compose exec odoo odoo -d dealflow360 -i dealflow360 --test-enable --stop-after-init`: **`0 failed, 0 error(s) of 4 tests`** — all four tests in `tests/test_discount_tier.py` pass.
+- Also ran `-u dealflow360` (the upgrade path from CLAUDE.md's dev loop, not just fresh `-i` install) on the already-installed database — clean, no errors, `Registry loaded in 8.256s`. Both install and upgrade paths are confirmed clean.
+- Verified the four seeded facts directly with `psql`, not just "install succeeded":
+  - Tiers: `Bronze=5, Silver=10, Gold=15` ✅
+  - Category limits: `Hardware=15, Services=10` ✅
+  - `Acme Corp` → `Gold` ✅
+  - ProBook Laptop `stock.quant`: `Main Warehouse=6, East Depot=4` — **confirmed no single warehouse can cover a 10-unit order** ✅ (this is the DF-010 fulfillment demo precondition)
+
+**Verification of every item from the previous "Known issues" list** (item-by-item, against the real Odoo 17.0 install, not source-grepping — the live installer settled these faster than reading source would have):
+1. `product.template.is_storable` — **WRONG, FIXED.** Odoo 17.0 has no such field; storable goods use `type='product'` (the three `type` values on 17.0 are `'product'`, `'consu'`, `'service'` — `'consu'` on 17.0 means non-stock-tracked "Consumable", not "Goods" as it does on 18). Fixed in `demo/demo_data.py`.
+2. `post_init_hook(env)` single-arg signature — **CONFIRMED CORRECT.** The hook ran and executed (`getattr(py_module, post_init)(env)` in the traceback shows Odoo itself calling it with one arg); had the signature been wrong we'd have seen a `TypeError` before ever reaching our code, and we didn't.
+3. View inheritance xmlids (`product.product_template_form_view`, `product.product_category_form_view`, `base.view_partner_form` + its `category_id` anchor) — **CONFIRMED CORRECT.** All of `dealflow360/views/*.xml` loaded without error; an inherited view with a bad `inherit_id` or a missing xpath target raises a hard `ValueError` at load time, and none did.
+4. Group `implied_ids` (`sales_team.group_sale_salesman`, `sales_team.group_sale_manager`, `account.group_account_invoice`) — **CONFIRMED CORRECT.** `security/dealflow_security.xml` loaded without error; a bad `ref()` raises immediately.
+5. `depends` list (`base, mail, product, sale_management, sale_stock, stock, account, portal`) — **CONFIRMED CORRECT.** The full dependency graph resolved and all 60 modules (our addon plus its transitive dependencies) loaded in the correct order.
+6. `ir.model.access.csv` column header format — **CONFIRMED CORRECT.** Loaded without error; a malformed CSV header raises at load time.
+7. `warehouse.lot_stock_id` + direct `stock.quant.create({'quantity': ...})` pattern — **CONFIRMED CORRECT.** The `psql` verification above shows exactly the intended 6/4 split against each warehouse's real stock location, and this is the same mechanism the DF-010 allocation engine will read from.
+
+So: **one real bug (`is_storable`), everything else in the original guess-list held.** Odoo's own installer was in fact faster than source-grepping would have been — it named the exact wrong field on the first failing run.
+
+**Important files**
+- `addons/dealflow360/demo/demo_data.py` — the only file changed (two `type='consu'`+`is_storable=True` pairs → `type='product'`).
+- `docs/task_plan.md` — DF-001 row flipped to ✅.
+
+**Current state**
+- DF-001 is now genuinely done: code, install, upgrade, tests and the four seed facts are all verified against a live Odoo 17.0 + PostgreSQL 15 instance. `docker compose ps` shows both containers `Up`/healthy.
+- Nothing under `D:\odoo-source` was created or used this round (Docker came back before source-grepping was needed) and nothing from outside the repo was committed.
+
+**Dependencies**
+- None outstanding for DF-001 itself. DF-002 is unblocked in every sense (code and verified runtime) and can start immediately.
+
+**Known issues**
+- None outstanding for the DF-001 scope. Whoever builds DF-012 (recurring billing) should remember `product.template.df_recurring_plan_id` was intentionally left out (see the DF-001 entry below) and needs adding once `dealflow.recurring.plan` exists.
+- Cosmetic-only: a docutils RST parser notice (`Unexpected indentation` / `Block quote ends without a blank line`) appears during core `mail` module loading on every install of this Odoo image, regardless of our addon — pre-existing Odoo-core behavior, not actionable.
+
+**Remaining work**
+- DF-002 (extend `sale.order`/`sale.order.line` with tier + category ceilings, per-line excess, live margin) is next per `docs/task_plan.md`.
+
+**Recommended next task**
+- DF-002, assigned to Atlas. Foundation-wise nothing about DF-001 changes how it should be built — the `type='product'` correction only affects demo data, not the model/field design DF-002 will extend.
+
+**Tests performed**
+- `docker compose exec odoo odoo -d dealflow360 -i dealflow360 --stop-after-init` — clean install, 0 errors, twice (once failing on `is_storable`, once clean after the fix).
+- `docker compose exec odoo odoo -d dealflow360 -i dealflow360 --test-enable --stop-after-init` — `0 failed, 0 error(s) of 4 tests`.
+- `docker compose exec odoo odoo -d dealflow360 -u dealflow360 --stop-after-init` — clean upgrade path, 0 errors.
+- Direct `psql` queries against `dealflow_discount_tier`, `dealflow_category_limit`, `res_partner`/`df_tier_id`, and `stock_quant`/`stock_location`/`stock_warehouse` confirming the four seeded facts exactly as specified.
+
+---
+
 ## DF-005a — UI specification: 18 mockup screens → Odoo views — Don — 2026-09-05
 
 **Completed work**

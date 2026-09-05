@@ -36,8 +36,7 @@ def _create_products(env, categories):
         {
             "name": "ProBook Laptop",
             "categ_id": categories["hardware"].id,
-            "type": "consu",
-            "is_storable": True,
+            "type": "product",
             "list_price": 1200.0,
             "standard_price": 850.0,
         }
@@ -65,8 +64,7 @@ def _create_products(env, categories):
         {
             "name": "Docking Station",
             "categ_id": categories["hardware"].id,
-            "type": "consu",
-            "is_storable": True,
+            "type": "product",
             "df_is_promoted": True,
             "df_min_margin": 20.0,
             "list_price": 150.0,

@@ -10,7 +10,7 @@
 ## Phase 1 — Odoo Foundation
 | ID | Task | Agent | Status |
 |---|---|---|---|
-| DF-001 | Docker stack (Odoo 17 + PG 15), `dealflow360` addon skeleton, security groups, menus, seed data (customers/tiers/products/categories/warehouses/stock) | Atlas | ⛔ (code complete, install unverified — Docker Desktop Linux engine down) |
+| DF-001 | Docker stack (Odoo 17 + PG 15), `dealflow360` addon skeleton, security groups, menus, seed data (customers/tiers/products/categories/warehouses/stock) | Atlas | ✅ |
 
 ## Phase 2 — Quotation Core
 | ID | Task | Agent | Status |
@@ -65,9 +65,9 @@
 
 ## Current state
 
-- **Current:** DF-001 (Atlas) — Odoo foundation code complete, pushed to `main`; install/upgrade **not yet verified** because Docker Desktop's Linux (WSL2) engine is not coming up on this machine (`docker info` returns 500; `wsl -l -v` shows no `docker-desktop` distro registered at all). Escalated to Michael/human.
-- **Next:** Verify DF-001 installs cleanly once Docker is fixed, then DF-002 → DF-003 → DF-004 (backend vertical slice), then Don picks up UI
-- **Blocked:** DF-001 install verification — needs Docker Desktop's Linux engine working (human/infra action, not an architecture issue)
+- **Current:** DF-001 done — Docker fixed (human reboot resolved a stuck `VirtualMachinePlatform` state), stack verified live: clean install, clean upgrade, all 4 unit tests pass, all 4 seeded facts confirmed in the database (see `docs/handoff.md` DF-001c). One real bug found and fixed: `product.template.is_storable` doesn't exist on Odoo 17.0 — Odoo 17 Community uses `type='product'` for storable goods, not the Odoo 18 `is_storable` field.
+- **Next:** DF-002 → DF-003 → DF-004 (backend vertical slice), then Don picks up UI per `docs/ui_spec.md`
+- **Blocked:** none
 
 ## Acceptance criteria summary
 
