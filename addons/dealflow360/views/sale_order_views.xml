@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Minimal field placement so DF-002's governance/margin values are
+         verifiable in the UI. Don owns the real quotation builder screens
+         (docs/ui_spec.md) - this is not that. -->
+    <record id="view_order_form_dealflow" model="ir.ui.view">
+        <field name="name">sale.order.form.dealflow</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='order_line']/tree" position="inside">
+                <field name="df_effective_ceiling" optional="show"/>
+                <field name="df_excess_points" optional="show"/>
+                <field name="df_margin_pct" optional="show"/>
+            </xpath>
+            <xpath expr="//notebook" position="inside">
+                <page string="DealFlow360" name="dealflow360">
+                    <group>
+                        <field name="df_margin_pct"/>
+                        <field name="df_pipeline_stage"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>
