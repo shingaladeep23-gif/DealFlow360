@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.Subscriptions">
+        <div class="o_df_subscriptions">
+            <div class="o_df_subscriptions_header">
+                <h2>Subscriptions</h2>
+                <p class="text-muted">One row per recurring order line (DEC-008) - real lifecycle state and next-bill date from DF-012.</p>
+            </div>
+
+            <div class="o_df_subscriptions_cards">
+                <div t-attf-class="o_df_stat_card {{state.filter === 'active' ? 'o_df_stat_card_active' : ''}}" t-on-click="() => this.setFilter('active')">
+                    <div class="o_df_stat_label">Active</div>
+                    <div class="o_df_stat_value" t-esc="state.counts.active"/>
+                </div>
+                <div t-attf-class="o_df_stat_card o_df_stat_card_warning {{state.filter === 'paused' ? 'o_df_stat_card_active' : ''}}" t-on-click="() => this.setFilter('paused')">
+                    <div class="o_df_stat_label">Paused</div>
+                    <div class="o_df_stat_value" t-esc="state.counts.paused"/>
+                </div>
+                <div t-attf-class="o_df_stat_card o_df_stat_card_danger {{state.filter === 'cancelled' ? 'o_df_stat_card_active' : ''}}" t-on-click="() => this.setFilter('cancelled')">
+                    <div class="o_df_stat_label">Cancelled</div>
+                    <div class="o_df_stat_value" t-esc="state.counts.cancelled"/>
+                </div>
+            </div>
+
+            <table t-if="filteredRows.length" class="o_df_activity_table">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Product</th>
+                        <th>Plan</th>
+                        <th>Cycle</th>
+                        <th>Next Bill</th>
+                        <th>MRR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr t-foreach="filteredRows" t-as="row" t-key="row.id" t-on-click="() => this.openOrder(row.order_id[0])">
+                        <td t-esc="row.order_id[1]"/>
+                        <td t-esc="row.product_id[1]"/>
+                        <td t-esc="row.planName"/>
+                        <td t-esc="row.cycle"/>
+                        <td t-esc="row.df_sub_next_bill_date"/>
+                        <td t-esc="row.df_mrr.toLocaleString(undefined, {style: 'currency', currency: 'USD'})"/>
+                    </tr>
+                </tbody>
+            </table>
+            <div t-elif="!state.loading" class="o_df_placeholder_panel">
+                No <t t-esc="state.filter"/> subscriptions.
+            </div>
+        </div>
+    </t>
+</templates>

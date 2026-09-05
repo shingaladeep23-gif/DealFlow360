@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Demo-polish task (2026-09-05): Subscriptions menu had no action -
-         wire it to the real DF-012 model instead of leaving a dead menu
-         item. dealflow.billing.schedule is one real scheduled/invoiced
-         billing event per recurring order line (see models/recurring.py) -
-         the closest honest "subscriptions activity" list available today;
-         no OWL screen, plain tree/form only per instructions. Deal Health
-         and Reports menus are hidden (active=False) in dealflow_menus.xml
-         edit below - DF-017/018 are not implemented, no placeholder
-         screens. -->
+    <!-- Subscriptions (Screen 9). The menu action now points at the OWL
+         screen (static/src/subscriptions/) over sale.order.line's real
+         df_sub_state/df_sub_next_bill_date/df_mrr (DEC-008: one recurring
+         line IS one subscription - no separate lifecycle model). The
+         dealflow.billing.schedule tree/form below is kept as a plain
+         per-event drill-down (accessible via the order form's Billing
+         Schedule tab / smart button already on sale.order.line), not the
+         Subscriptions landing page anymore. -->
+    <record id="action_dealflow_subscriptions_screen" model="ir.actions.client">
+        <field name="name">Subscriptions</field>
+        <field name="tag">dealflow_subscriptions</field>
+    </record>
     <record id="view_billing_schedule_list" model="ir.ui.view">
         <field name="name">dealflow.billing.schedule.list</field>
         <field name="model">dealflow.billing.schedule</field>
@@ -74,8 +77,8 @@
         </field>
     </record>
 
-    <record id="action_dealflow_subscriptions" model="ir.actions.act_window">
-        <field name="name">Subscriptions</field>
+    <record id="action_dealflow_billing_schedule" model="ir.actions.act_window">
+        <field name="name">Billing Schedule</field>
         <field name="res_model">dealflow.billing.schedule</field>
         <field name="view_mode">tree,form</field>
         <field name="search_view_id" ref="view_billing_schedule_search"/>
@@ -83,6 +86,6 @@
 
     <menuitem id="menu_dealflow_subscriptions"
               parent="menu_dealflow_root"
-              action="action_dealflow_subscriptions"
+              action="action_dealflow_subscriptions_screen"
               sequence="50"/>
 </odoo>

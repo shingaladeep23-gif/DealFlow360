@@ -6,6 +6,11 @@
          this with the two-table OWL screen from docs/ui_spec.md without
          touching any DF-010 model or logic. -->
 
+    <!-- 2026-09-05 frontend pass: Screen 5 detail. Recommendation banner
+         and backorder badge are pure presentation over existing fields
+         (shipment_count/has_backorder/state) - no new field, per DEC-006
+         Don's ui_spec.md already flagged df_recommendation_note as
+         optional/not required. -->
     <record id="view_dealflow_warehouse_split_form" model="ir.ui.view">
         <field name="name">dealflow.warehouse.split.form</field>
         <field name="model">dealflow.warehouse.split</field>
@@ -21,18 +26,28 @@
                     <field name="state" widget="statusbar" statusbar_visible="draft,confirmed"/>
                 </header>
                 <sheet>
-                    <group>
-                        <field name="order_id" readonly="1"/>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="order_id" readonly="1"/>
+                        </h1>
+                    </div>
+                    <group col="4">
                         <field name="partner_id" readonly="1"/>
-                        <field name="shipment_count" readonly="1"/>
-                        <field name="has_backorder" readonly="1"/>
+                        <field name="shipment_count" readonly="1" string="Est. Shipments"/>
+                        <field name="has_backorder" readonly="1" invisible="1"/>
                     </group>
+                    <div class="o_df_flag_banner" invisible="shipment_count &lt;= 1 or has_backorder">
+                        Recommended allocation combines shipments where possible to minimize shipping cost and lead time.
+                    </div>
+                    <div class="o_df_flag_banner" invisible="not has_backorder">
+                        Part of this order cannot be sourced from current stock and is on backorder. Use "Consolidate Backorder" once new stock arrives.
+                    </div>
                     <field name="line_ids" readonly="state == 'confirmed'">
-                        <tree string="Allocation" editable="bottom">
+                        <tree string="Allocation" editable="bottom" decoration-warning="is_backorder">
                             <field name="product_id" readonly="1"/>
                             <field name="warehouse_id"/>
                             <field name="qty"/>
-                            <field name="df_estimated_cost"/>
+                            <field name="df_estimated_cost" string="Cost"/>
                             <field name="is_backorder" widget="boolean_toggle"/>
                         </tree>
                     </field>
@@ -40,7 +55,7 @@
                         <tree string="Deliveries">
                             <field name="name"/>
                             <field name="picking_type_id"/>
-                            <field name="state"/>
+                            <field name="state" widget="badge"/>
                         </tree>
                     </field>
                 </sheet>
@@ -48,27 +63,12 @@
         </field>
     </record>
 
-    <record id="view_dealflow_warehouse_split_list" model="ir.ui.view">
-        <field name="name">dealflow.warehouse.split.list</field>
-        <field name="model">dealflow.warehouse.split</field>
-        <field name="arch" type="xml">
-            <tree string="Orders Awaiting Fulfillment">
-                <field name="order_id"/>
-                <field name="partner_id"/>
-                <field name="state"/>
-                <field name="shipment_count"/>
-                <field name="has_backorder"/>
-            </tree>
-        </field>
-    </record>
-
-    <record id="action_dealflow_warehouse_split" model="ir.actions.act_window">
+    <record id="action_dealflow_fulfillment" model="ir.actions.client">
         <field name="name">Fulfillment</field>
-        <field name="res_model">dealflow.warehouse.split</field>
-        <field name="view_mode">tree,form</field>
+        <field name="tag">dealflow_fulfillment</field>
     </record>
 
     <menuitem id="menu_dealflow_fulfillment" name="Fulfillment" parent="menu_dealflow_root"
-              action="action_dealflow_warehouse_split" sequence="40"
+              action="action_dealflow_fulfillment" sequence="40"
               groups="group_dealflow_sales_rep"/>
 </odoo>

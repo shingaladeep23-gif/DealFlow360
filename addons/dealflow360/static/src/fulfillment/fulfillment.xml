@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.Fulfillment">
+        <div class="o_df_fulfillment">
+            <div class="o_df_fulfillment_header">
+                <h2>Fulfillment &amp; Stock</h2>
+                <p class="text-muted">Live warehouse stock and orders awaiting shipment, sourced from real stock.quant and DF-010's allocation engine.</p>
+            </div>
+
+            <div class="o_df_fulfillment_section">
+                <h3>Live Stock</h3>
+                <table t-if="state.stockRows.length" class="o_df_activity_table">
+                    <thead>
+                        <tr>
+                            <th>Warehouse</th>
+                            <th>Product</th>
+                            <th>In Stock</th>
+                            <th>Reserved</th>
+                            <th>Available</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="state.stockRows" t-as="row" t-key="row.warehouse + row.product">
+                            <td t-esc="row.warehouse"/>
+                            <td t-esc="row.product"/>
+                            <td t-esc="row.onHand"/>
+                            <td t-esc="row.reserved"/>
+                            <td t-attf-class="{{row.available &lt;= 0 ? 'o_df_text_danger' : ''}}" t-esc="row.available"/>
+                        </tr>
+                    </tbody>
+                </table>
+                <div t-elif="!state.loading" class="o_df_placeholder_panel">No stock on hand.</div>
+            </div>
+
+            <div class="o_df_fulfillment_section">
+                <h3>Orders Awaiting Fulfillment</h3>
+                <table t-if="state.splits.length" class="o_df_activity_table">
+                    <thead>
+                        <tr>
+                            <th>Order</th>
+                            <th>Customer</th>
+                            <th>Status</th>
+                            <th>Shipments</th>
+                            <th>Complexity</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="state.splits" t-as="split" t-key="split.id" t-on-click="() => this.openSplit(split.id)">
+                            <td t-esc="split.order_id[1]"/>
+                            <td t-esc="split.partner_id and split.partner_id[1]"/>
+                            <td>
+                                <span t-attf-class="o_df_step_badge o_df_step_badge_#{split.state === 'confirmed' ? 'approved' : 'pending'}"
+                                      t-esc="split.state === 'confirmed' ? 'Confirmed' : 'Proposed'"/>
+                            </td>
+                            <td t-esc="split.shipment_count"/>
+                            <td>
+                                <span t-if="split.shipment_count > 1" class="o_df_step_badge o_df_step_badge_revision">Dual-warehouse split</span>
+                                <span t-if="split.has_backorder" class="o_df_step_badge o_df_step_badge_rejected">Backorder</span>
+                                <span t-if="split.shipment_count &lt;= 1 and !split.has_backorder" class="text-muted">Single shipment</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div t-elif="!state.loading" class="o_df_placeholder_panel">No orders awaiting fulfillment yet.</div>
+            </div>
+        </div>
+    </t>
+</templates>
