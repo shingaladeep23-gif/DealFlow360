@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="recurring_plan_monthly" model="dealflow.recurring.plan">
+            <field name="name">Standard Monthly</field>
+            <field name="interval">monthly</field>
+            <field name="proration" eval="True"/>
+            <field name="cancel_rule">prorate_refund</field>
+        </record>
+        <record id="recurring_plan_quarterly" model="dealflow.recurring.plan">
+            <field name="name">Standard Quarterly</field>
+            <field name="interval">quarterly</field>
+            <field name="proration" eval="True"/>
+            <field name="cancel_rule">prorate_refund</field>
+        </record>
+        <record id="recurring_plan_yearly" model="dealflow.recurring.plan">
+            <field name="name">Standard Annual</field>
+            <field name="interval">yearly</field>
+            <field name="proration" eval="True"/>
+            <field name="cancel_rule">no_refund</field>
+        </record>
+    </data>
+</odoo>

@@ -28,6 +28,8 @@ and deal health monitoring — built on native Odoo 17 Community models.
         "security/ir.model.access.csv",
         "data/discount_tier_data.xml",
         "data/category_limit_data.xml",
+        "data/recurring_plan_data.xml",
+        "data/billing_cron_data.xml",
         "views/discount_tier_views.xml",
         "views/res_partner_views.xml",
         "views/product_views.xml",
