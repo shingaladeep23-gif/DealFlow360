@@ -18,11 +18,23 @@ QUOTATION_PAGE_SIZE = 20
 #
 # "open" is a quotation the customer can still act on. A confirmed order is not
 # one (it is on "Your Orders"), and a cancelled one is not either.
+#
+# Neither filter admits 'draft'. A draft is the rep's private working copy that
+# has not been sent to anyone, and it has no business appearing in a customer's
+# list - B8's status vocabulary is Sent / Under Negotiation / Confirmed, with no
+# "Draft" in it at all. The authoritative block is the record rule in
+# security/dealflow_security.xml, which makes drafts unreadable to portal users
+# outright; these domains keep the page and its badge counts honest.
 QUOTATION_FILTERS = {
-    "all": [("state", "!=", "cancel")],
-    "to_review": [("state", "in", ("draft", "sent"))],
+    "all": [("state", "in", ("sent", "sale", "done"))],
+    "to_review": [("state", "=", "sent")],
 }
 DEFAULT_QUOTATION_FILTER = "all"
+
+# The one state in which a customer may act on their quotation - counter-offer
+# it or confirm it. 'draft' is not customer-facing (see above); 'sale'/'done'
+# are already decided; 'cancel' is over.
+CUSTOMER_ACTIONABLE_STATES = ("sent",)
 
 # Genuinely separate from Odoo's native sale-portal quote/order screens
 # (DEC-007/architecture.md §6-7): dedicated routes and templates that expose
@@ -94,9 +106,11 @@ class DealflowPortal(CustomerPortal):
             return _("Confirmed")
         if has_negotiation:
             return _("Under Negotiation")
-        if order.state == "sent":
-            return _("Sent")
-        return _("Draft")
+        # Everything a portal user can reach is at least 'sent' - the record
+        # rule in security/dealflow_security.xml withholds 'draft' entirely.
+        # There is deliberately no "Draft" label here any more: it was leaking
+        # an internal state into B8's customer-facing vocabulary.
+        return _("Sent")
 
     def _dealflow_portal_status_badge_class(self, order, has_negotiation):
         """Same inputs as _dealflow_portal_status, kept separate so the CSS
@@ -107,9 +121,7 @@ class DealflowPortal(CustomerPortal):
             return "o_df_portal_badge_confirmed"
         if has_negotiation:
             return "o_df_portal_badge_negotiation"
-        if order.state == "sent":
-            return "o_df_portal_badge_sent"
-        return "o_df_portal_badge_draft"
+        return "o_df_portal_badge_sent"
 
     @http.route(["/my/quotations", "/my/quotations/page/<int:page>"], type="http", auth="user", website=True)
     def dealflow_portal_quotations(self, page=1, filterby=None, **kwargs):
@@ -225,7 +237,7 @@ class DealflowPortal(CustomerPortal):
     @http.route(["/my/quotation/<int:order_id>/counter"], type="http", auth="user", methods=["POST"], website=True)
     def dealflow_portal_quotation_counter(self, order_id, access_token=None, **post):
         order_sudo = self._dealflow_document_check_access(order_id, access_token)
-        if order_sudo.state not in ("draft", "sent"):
+        if order_sudo.state not in CUSTOMER_ACTIONABLE_STATES:
             return request.redirect(f"/my/quotation/{order_sudo.id}")
         try:
             pct = float(post.get("counter_discount", ""))
@@ -260,7 +272,12 @@ class DealflowPortal(CustomerPortal):
     @http.route(["/my/quotation/<int:order_id>/confirm"], type="http", auth="user", methods=["POST"], website=True)
     def dealflow_portal_quotation_confirm(self, order_id, access_token=None, **post):
         order_sudo = self._dealflow_document_check_access(order_id, access_token)
-        if order_sudo.state not in ("draft", "sent"):
+        if order_sudo.state not in CUSTOMER_ACTIONABLE_STATES:
+            # 'draft' used to be accepted here. Live-reproduced: a rep created
+            # S00055 and never sent it; the customer opened it from their
+            # portal list and pressed Confirm, and the order went to 'sale'.
+            # A quotation nobody sent is not an offer, and confirming one is
+            # not the customer's to do.
             return request.redirect(f"/my/quotation/{order_sudo.id}")
         if request.env["dealflow.negotiation"].sudo()._open_for_order(order_sudo):
             # Server-side, not just the disabled button. _dealflow_confirm_blocked

@@ -79,9 +79,10 @@
          state == 'sent'. A quotation this product has not explicitly sent is
          therefore counted and then not shown - the customer clicks a card
          reading "3" and lands on an empty page. /my/quotations is this
-         module's equivalent screen (DEC-007) and it renders draft and sent
-         quotations alike, so the alert is re-pointed at it with the matching
-         filter rather than at a list that cannot contain what was counted.
+         module's equivalent screen (DEC-007) and its counters and its list
+         run the identical domain (QUOTATION_FILTERS), so the alert is
+         re-pointed at it with the matching filter rather than at a list that
+         cannot contain what was counted.
          Only the destination changes; the native card, its styling and its
          count placeholder are left exactly as `sale` defines them. -->
     <template id="portal_my_home_sale_quotations_url" name="Portal My Home: send the quotations alert to a list that matches its count"
@@ -181,7 +182,11 @@
                     </table>
                 </div>
 
-                <t t-if="order.state in ('draft', 'sent')">
+                <!-- 'sent' only: a quotation the rep has not sent is not an
+                     offer, so there is nothing for the customer to counter or
+                     confirm. Matches CUSTOMER_ACTIONABLE_STATES in
+                     controllers/portal.py, which enforces the same on POST. -->
+                <t t-if="order.state == 'sent'">
                     <div class="o_df_portal_card o_df_portal_negotiate_card">
                         <h5>Propose a counter-discount</h5>
                         <p class="text-muted mb-3">Ask for a different discount on this quotation. We'll recalculate and let you know.</p>

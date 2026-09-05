@@ -38,7 +38,15 @@ class TestPortalIsolation(TransactionCase):
             }
         )
 
-        cls.acme_order = cls.env["sale.order"].create({"partner_id": cls.acme.id})
+        # state='sent': a quotation the rep has actually released. The DEC-012
+        # rule scopes portal reads by BOTH owner and release - an unsent draft
+        # is the rep's private working copy and is invisible to the customer
+        # (see test_portal_user_cannot_read_an_unsent_draft below), so an
+        # isolation fixture left in 'draft' would be unreadable for the wrong
+        # reason and prove nothing about ownership.
+        cls.acme_order = cls.env["sale.order"].create(
+            {"partner_id": cls.acme.id, "state": "sent"}
+        )
         cls.env["sale.order.line"].create(
             {
                 "order_id": cls.acme_order.id,
@@ -46,10 +54,20 @@ class TestPortalIsolation(TransactionCase):
                 "product_uom_qty": 1,
             }
         )
-        cls.beta_order = cls.env["sale.order"].create({"partner_id": cls.beta.id})
+        cls.beta_order = cls.env["sale.order"].create(
+            {"partner_id": cls.beta.id, "state": "sent"}
+        )
         cls.env["sale.order.line"].create(
             {
                 "order_id": cls.beta_order.id,
+                "product_id": cls.probook.id,
+                "product_uom_qty": 1,
+            }
+        )
+        cls.acme_draft = cls.env["sale.order"].create({"partner_id": cls.acme.id})
+        cls.env["sale.order.line"].create(
+            {
+                "order_id": cls.acme_draft.id,
                 "product_id": cls.probook.id,
                 "product_uom_qty": 1,
             }
@@ -82,6 +100,18 @@ class TestPortalIsolation(TransactionCase):
             self.env["sale.order"].with_user(self.acme_user).browse(self.acme_order.id)
         )
         order_as_acme.read(["name"])  # must not raise
+
+    def test_portal_user_cannot_read_an_unsent_draft(self):
+        """Ownership is only half of "which of my quotations may I see". A
+        quotation still in 'draft' has not been sent to anybody, and listing
+        the rep's private drafts to the customer is what let a customer
+        confirm a quotation nobody had offered them."""
+        drafts = self.env["sale.order"].with_user(self.acme_user).search([])
+        self.assertNotIn(self.acme_draft, drafts)
+        with self.assertRaises(AccessError):
+            self.env["sale.order"].with_user(self.acme_user).browse(
+                self.acme_draft.id
+            ).read(["name"])
 
     def test_portal_user_cannot_write_any_order(self):
         """The DEC-012 rule grants perm_read only - all mutation goes through

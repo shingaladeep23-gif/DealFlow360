@@ -51,11 +51,28 @@
              customer's). Gate on user.share (true only for portal/public
              users) so internal users are unaffected by this rule and portal
              users stay locked to their own records - domain_force is eval'd
-             as Python with `user` in scope, so the conditional is legitimate. -->
+             as Python with `user` in scope, so the conditional is legitimate.
+
+             The state term is the second half of the ownership question: WHICH
+             of my own quotations am I entitled to see? A quotation in 'draft'
+             is the rep's private working copy - it has not been sent to
+             anybody. Live-reproduced bug: the portal listed 18 unsent internal
+             drafts to the customer, and a customer opened one the rep had
+             never sent (S00055, state='draft') and pressed Confirm, taking it
+             straight to 'sale'. Excluding draft HERE rather than only in
+             controllers/portal.py closes it for every read path at once -
+             our own portal screens, Odoo's native /my/quotes and /my/orders,
+             and any ORM read a portal user could otherwise reach. The
+             controller still checks state on the write routes; this is the
+             layer that makes the record invisible in the first place.
+
+             A quotation becomes customer-visible the moment it is genuinely
+             released: the rep sends it, or an approval chain completes and
+             sale.order._df_on_approval_granted() marks it sent. -->
         <record id="rule_dealflow_portal_sale_order_own" model="ir.rule">
-            <field name="name">DealFlow360: portal users see only their own quotations</field>
+            <field name="name">DealFlow360: portal users see only their own, released quotations</field>
             <field name="model_id" ref="sale.model_sale_order"/>
-            <field name="domain_force">[('partner_id', 'child_of', [user.commercial_partner_id.id])] if user.share else [(1, '=', 1)]</field>
+            <field name="domain_force">['&amp;', ('partner_id', 'child_of', [user.commercial_partner_id.id]), ('state', '!=', 'draft')] if user.share else [(1, '=', 1)]</field>
             <field name="perm_read">1</field>
             <field name="perm_write">0</field>
             <field name="perm_create">0</field>

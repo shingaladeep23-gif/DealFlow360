@@ -63,6 +63,17 @@ class TestPortalHttp(HttpCase):
             }
         )
 
+        # A quotation the rep is still working on and has NOT sent. The
+        # customer must never see this, let alone act on it.
+        cls.acme_draft = cls.env["sale.order"].create({"partner_id": cls.acme.id})
+        cls.env["sale.order.line"].create(
+            {
+                "order_id": cls.acme_draft.id,
+                "product_id": cls.probook.id,
+                "product_uom_qty": 1,
+            }
+        )
+
     def _csrf_token(self, html):
         match = re.search(r'name="csrf_token"\s+value="([^"]+)"', html)
         self.assertTrue(match, "expected a csrf_token hidden input on the rendered form")
@@ -194,6 +205,37 @@ class TestPortalHttp(HttpCase):
             "sale",
             "confirming terms the customer has themselves disputed",
         )
+
+    # -- an unsent draft is not the customer's to see or to accept -----------
+
+    def test_unsent_draft_is_not_listed_to_the_customer(self):
+        """Live-reproduced: /my/quotations listed 18 internal drafts, each
+        badged "Draft" - a status B8's vocabulary does not even contain."""
+        self.authenticate("acme_http_test@example.com", "AcmeHttp123!")
+        response = self.url_open("/my/quotations")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.acme_order.name, response.text, "sent quotations still list")
+        self.assertNotIn(self.acme_draft.name, response.text)
+
+    def test_unsent_draft_detail_is_denied(self):
+        self.authenticate("acme_http_test@example.com", "AcmeHttp123!")
+        response = self.url_open(f"/my/quotation/{self.acme_draft.id}")
+        self.assertIn(response.status_code, (403, 404))
+        self.assertNotIn(self.acme_draft.name, response.text)
+
+    def test_customer_cannot_confirm_a_quotation_the_rep_never_sent(self):
+        """The reported P0: created as the rep, left in 'draft', never sent -
+        and the customer opened it from their portal and pressed Confirm,
+        taking it straight to 'sale'."""
+        self.authenticate("acme_http_test@example.com", "AcmeHttp123!")
+        detail = self.url_open(f"/my/quotation/{self.acme_order.id}")
+        token = self._csrf_token(detail.text)
+        self.url_open(
+            f"/my/quotation/{self.acme_draft.id}/confirm",
+            data={"csrf_token": token},
+        )
+        self.acme_draft.invalidate_recordset(["state"])
+        self.assertEqual(self.acme_draft.state, "draft")
 
     def test_only_one_open_request_at_a_time(self):
         self.authenticate("acme_http_test@example.com", "AcmeHttp123!")

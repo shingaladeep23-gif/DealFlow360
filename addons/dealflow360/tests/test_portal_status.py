@@ -30,9 +30,22 @@ class TestPortalStatus(TransactionCase):
         )
         return order
 
-    def test_draft_without_negotiation(self):
+    def test_no_customer_facing_status_is_ever_draft(self):
+        """B8's vocabulary is Sent / Under Negotiation / Confirmed. "Draft" is
+        an internal state and used to leak straight through to the customer's
+        list - alongside 18 quotations the rep had never sent. Drafts are now
+        unreadable to portal users at all (see the record rule in
+        security/dealflow_security.xml), so there is no draft label left to
+        render."""
         order = self._make_order()
-        self.assertEqual(self.controller._dealflow_portal_status(order, False), "Draft")
+        self.assertEqual(order.state, "draft")
+        self.assertNotEqual(
+            self.controller._dealflow_portal_status(order, False), "Draft"
+        )
+        self.assertNotIn(
+            "draft",
+            self.controller._dealflow_portal_status_badge_class(order, False),
+        )
 
     def test_sent_without_negotiation(self):
         order = self._make_order()
