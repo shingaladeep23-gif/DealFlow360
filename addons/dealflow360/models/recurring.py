@@ -149,7 +149,11 @@ class SaleOrderLineSubscription(models.Model):
         entry for a newly confirmed recurring line. Idempotent - a line
         that already carries schedule rows is left untouched, so calling
         this again on an already-started order is harmless."""
-        Schedule = self.env["dealflow.billing.schedule"]
+        # sudo(): schedule rows are produced by the billing engine when an
+        # order is confirmed. Only Finance/Admin may create them by hand (see
+        # ir.model.access.csv), but a Sales Rep or Manager confirming an order
+        # that happens to contain a recurring line must not hit an AccessError.
+        Schedule = self.env["dealflow.billing.schedule"].sudo()
         today = fields.Date.context_today(self)
         for line in self:
             if not line.product_id.df_is_recurring or line.billing_schedule_ids:
@@ -180,7 +184,7 @@ class SaleOrderLineSubscription(models.Model):
             return
         next_date = _add_interval(from_date, plan.interval)
         self.df_sub_next_bill_date = next_date
-        self.env["dealflow.billing.schedule"].create(
+        self.env["dealflow.billing.schedule"].sudo().create(
             {
                 "order_id": self.order_id.id,
                 "order_line_id": self.id,
@@ -216,7 +220,7 @@ class SaleOrderLineSubscription(models.Model):
         delta_amount = unit_price * (new_qty - old_qty) * remaining_fraction
         if abs(delta_amount) < 0.005:
             return
-        self.env["dealflow.billing.schedule"].create(
+        self.env["dealflow.billing.schedule"].sudo().create(
             {
                 "order_id": self.order_id.id,
                 "order_line_id": self.id,
@@ -323,10 +327,32 @@ class DealflowBillingSchedule(models.Model):
 
     def action_invoice_now(self):
         """Manually force a pending entry to invoice immediately, ahead of
-        the daily cron - used by the admin 'Generate Invoice Now' action
-        and by tests."""
+        the daily cron - used by the 'Generate Invoice Now' button and by
+        tests. Goes through the SAME entry point as the cron: this used to
+        call _create_invoice() directly and skip _df_schedule_next_bill(),
+        so a subscription invoiced from the UI silently stopped renewing -
+        no following cycle was ever queued and df_sub_next_bill_date never
+        advanced, while the identical action run by the cron renewed
+        correctly."""
         for schedule in self.filtered(lambda s: s.state == "pending"):
-            schedule._create_invoice()
+            schedule._df_process_due_entry()
+        return True
+
+    def _df_process_due_entry(self):
+        """Invoice one pending entry and queue the cycle that follows it.
+
+        Single source of truth for what "billing an entry" means, shared by
+        the daily cron and the manual button. A line paused or cancelled
+        after its entry was queued is cancelled rather than invoiced; a
+        proration entry is one-off and never queues a successor."""
+        self.ensure_one()
+        line = self.order_line_id
+        if line.df_sub_state != "active":
+            self.write({"state": "cancelled"})
+            return False
+        self._create_invoice()
+        if not self.df_is_proration:
+            line._df_schedule_next_bill(self.date)
         return True
 
     def _create_invoice(self):
@@ -416,10 +442,4 @@ class DealflowBillingSchedule(models.Model):
         today = fields.Date.context_today(self)
         due = self.search([("state", "=", "pending"), ("date", "<=", today)])
         for schedule in due:
-            line = schedule.order_line_id
-            if line.df_sub_state != "active":
-                schedule.write({"state": "cancelled"})
-                continue
-            schedule._create_invoice()
-            if not schedule.df_is_proration:
-                line._df_schedule_next_bill(schedule.date)
+            schedule._df_process_due_entry()

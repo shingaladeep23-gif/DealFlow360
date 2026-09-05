@@ -68,7 +68,15 @@ class DealflowApproval(models.Model):
             if order.df_risk_level == "medium"
             else ["sales_manager", "finance"]
         )
-        approval = self.create(
+        # sudo(): routing is performed BY THE SYSTEM in response to the rep's
+        # Confirm, not authored by the rep. ir.model.access.csv deliberately
+        # withholds create on this model from Sales Rep and Finance so nobody
+        # can hand-craft an approval chain - but without sudo() here that same
+        # ACL also blocked the automatic routing AT-04 requires, so a rep
+        # confirming their own over-ceiling quotation got an AccessError
+        # instead of an approval. Same reasoning, and same fix, as
+        # dealflow.audit.log._log().
+        approval = self.sudo().create(
             {
                 "order_id": order.id,
                 "risk_score": order.df_blended_risk_score,

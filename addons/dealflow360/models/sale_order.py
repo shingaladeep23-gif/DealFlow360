@@ -223,14 +223,33 @@ class SaleOrder(models.Model):
                 routed |= order
         confirmed = super(SaleOrder, to_confirm).action_confirm() if to_confirm else True
         if routed:
-            raise UserError(
-                _(
-                    "The following quotations exceeded their discount ceiling "
-                    "and have been routed for approval instead of being "
-                    "confirmed: %s"
-                )
-                % ", ".join(routed.mapped("name"))
-            )
+            # NOT a UserError. Routing is a state change we must KEEP: raising
+            # here propagated out of the RPC call, which rolls the whole
+            # transaction back - so the user was told "routed for approval"
+            # while the dealflow.approval chain, its steps and df_approval_id
+            # were all discarded. Live-verified before the fix: confirming an
+            # over-ceiling quotation left approvals count unchanged,
+            # df_approval_id False and df_pipeline_stage still 'draft', so
+            # AT-04's automatic routing never actually happened through the UI
+            # and the Approvals screen stayed permanently empty. (The portal
+            # path survived only because its controller CATCHES the UserError,
+            # which is what kept this hidden.) A returned client action
+            # reports the same thing without destroying it.
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Routed for approval"),
+                    "message": _(
+                        "%s exceeded its discount ceiling and has been sent "
+                        "for approval instead of being confirmed."
+                    )
+                    % ", ".join(routed.mapped("name")),
+                    "type": "warning",
+                    "sticky": False,
+                    "next": {"type": "ir.actions.act_window_close"},
+                },
+            }
         return confirmed
 
     def _df_trigger_reapproval(self, negotiation=None):
@@ -473,6 +492,19 @@ class SaleOrder(models.Model):
                 order.df_health_flagged_date = now
             elif not active_flags:
                 order.df_health_flagged_date = False
+
+    def action_df_refresh_health(self):
+        """On-demand recompute from the UI (quotation form button and the
+        Deal Health screen). DF-017's signals are time-based, so without a
+        manual trigger the only thing that ever refreshed them was the cron
+        - which made the feature look dead to anyone opening a deal between
+        cron runs. Same code path as the cron, never a parallel one."""
+        # sudo(): df_health_* are engine-owned readonly fields. Finance can
+        # open a quotation but has no write access to sale.order, so without
+        # this the Refresh button would fail for exactly the role most likely
+        # to be reviewing a troubled deal.
+        self.sudo()._compute_deal_health()
+        return True
 
     @api.model
     def _cron_compute_deal_health(self):

@@ -202,10 +202,24 @@ class DealflowPortal(CustomerPortal):
         try:
             order_sudo.action_confirm()
         except UserError as exc:
+            # Still pending an approval step - a genuine block with nothing to
+            # persist.
             order_sudo.message_post(
-                body=_(
-                    "Customer attempted to confirm from the portal: %s"
-                )
+                body=_("Customer attempted to confirm from the portal: %s")
                 % str(exc)
             )
+        else:
+            # action_confirm no longer raises when it ROUTES an order for
+            # approval (that raise rolled the routing back - see
+            # models/sale_order.py); it returns a notification action and
+            # leaves the order unconfirmed. Read the real state back rather
+            # than inferring success from "no exception".
+            if order_sudo.state not in ("sale", "done"):
+                order_sudo.message_post(
+                    body=_(
+                        "Customer attempted to confirm from the portal. The "
+                        "quotation exceeded its discount ceiling and has been "
+                        "routed for approval instead."
+                    )
+                )
         return request.redirect(f"/my/quotation/{order_sudo.id}")
