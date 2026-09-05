@@ -12,7 +12,8 @@
                 </div>
             </div>
 
-            <div class="o_df_dashboard_cards">
+            <div t-if="state.loading" class="o_df_placeholder_panel">Loading dashboard…</div>
+            <div t-else="" class="o_df_dashboard_cards">
                 <div class="o_df_stat_card" t-on-click="() => this.openQuotations([['state', 'in', ['draft', 'sent']]])">
                     <div class="o_df_stat_label">Open Quotations</div>
                     <div class="o_df_stat_value" t-esc="state.openQuotations"/>
