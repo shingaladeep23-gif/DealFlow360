@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- DF-006: Screens 7/8 - Approvals list + detail. Built against
+         Atlas's DF-004 dealflow.approval / dealflow.approval.step models
+         (see models/approval.py) - views/static only, no model changes.
+         The "why flagged" line-level breakdown table from the mockup needs
+         a related field on dealflow.approval that doesn't exist yet
+         (order line ceiling/excess can't be dotted-into from this model in
+         plain XML) - flagged to Atlas/god rather than guessed. Everything
+         else (risk badge, chain stepper, approve/reject/revise) is real
+         and wired to the live model. -->
+    <record id="view_approval_list" model="ir.ui.view">
+        <field name="name">dealflow.approval.list</field>
+        <field name="model">dealflow.approval</field>
+        <field name="arch" type="xml">
+            <tree string="Approvals" decoration-warning="state == 'pending'"
+                  decoration-danger="state == 'rejected'" decoration-success="state == 'approved'">
+                <field name="order_id"/>
+                <field name="risk_level" widget="label_selection"
+                       options="{'classes': {'medium': 'warning', 'high': 'danger'}}"/>
+                <field name="current_step_id" string="Pending Step"/>
+                <field name="state" widget="badge"
+                       decoration-warning="state == 'pending'"
+                       decoration-success="state == 'approved'"
+                       decoration-danger="state == 'rejected'"
+                       decoration-info="state == 'revision'"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_approval_form" model="ir.ui.view">
+        <field name="name">dealflow.approval.form</field>
+        <field name="model">dealflow.approval</field>
+        <field name="arch" type="xml">
+            <form string="Approval">
+                <sheet>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="order_id" readonly="1"/>
+                        </h1>
+                    </div>
+                    <group col="4">
+                        <field name="risk_level" widget="label_selection"
+                               options="{'classes': {'medium': 'warning', 'high': 'danger'}}"/>
+                        <field name="risk_score" string="Blended Risk Score"/>
+                        <field name="state" widget="badge"
+                               decoration-warning="state == 'pending'"
+                               decoration-success="state == 'approved'"
+                               decoration-danger="state == 'rejected'"
+                               decoration-info="state == 'revision'"/>
+                    </group>
+                    <field name="step_ids" widget="dealflow_approval_stepper" nolabel="1"/>
+                    <field name="step_ids">
+                        <tree editable="bottom" create="0" delete="0">
+                            <field name="sequence" invisible="1"/>
+                            <field name="role"/>
+                            <field name="approver_id" string="Acted By"/>
+                            <field name="acted_on"/>
+                            <field name="reason"/>
+                            <field name="state" widget="dealflow_approval_step_actions"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_approval_search" model="ir.ui.view">
+        <field name="name">dealflow.approval.search</field>
+        <field name="model">dealflow.approval</field>
+        <field name="arch" type="xml">
+            <search string="Approvals">
+                <field name="order_id"/>
+                <filter name="pending" string="Pending" domain="[('state', '=', 'pending')]"/>
+                <filter name="approved" string="Approved" domain="[('state', '=', 'approved')]"/>
+                <filter name="rejected" string="Rejected" domain="[('state', '=', 'rejected')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_risk" string="Risk Level" context="{'group_by': 'risk_level'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_dealflow_approvals" model="ir.actions.act_window">
+        <field name="name">Approvals</field>
+        <field name="res_model">dealflow.approval</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_pending': 1}</field>
+        <field name="search_view_id" ref="view_approval_search"/>
+    </record>
+
+    <menuitem id="menu_dealflow_approvals"
+              parent="menu_dealflow_root"
+              action="action_dealflow_approvals"
+              sequence="30"/>
+</odoo>

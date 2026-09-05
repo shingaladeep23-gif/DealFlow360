@@ -19,3 +19,7 @@ access_dealflow_audit_log_rep,dealflow.audit.log.rep,model_dealflow_audit_log,gr
 access_dealflow_audit_log_manager,dealflow.audit.log.manager,model_dealflow_audit_log,group_dealflow_sales_manager,1,0,0,0
 access_dealflow_audit_log_finance,dealflow.audit.log.finance,model_dealflow_audit_log,group_dealflow_finance,1,0,0,0
 access_dealflow_audit_log_admin,dealflow.audit.log.admin,model_dealflow_audit_log,group_dealflow_admin,1,0,0,0
+access_dealflow_warehouse_split_rep,dealflow.warehouse.split.rep,model_dealflow_warehouse_split,group_dealflow_sales_rep,1,1,1,0
+access_dealflow_warehouse_split_admin,dealflow.warehouse.split.admin,model_dealflow_warehouse_split,group_dealflow_admin,1,1,1,1
+access_dealflow_warehouse_split_line_rep,dealflow.warehouse.split.line.rep,model_dealflow_warehouse_split_line,group_dealflow_sales_rep,1,1,1,0
+access_dealflow_warehouse_split_line_admin,dealflow.warehouse.split.line.admin,model_dealflow_warehouse_split_line,group_dealflow_admin,1,1,1,1

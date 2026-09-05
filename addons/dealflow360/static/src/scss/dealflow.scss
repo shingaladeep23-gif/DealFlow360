@@ -202,3 +202,73 @@
         &.o_df_risk_badge_high { background-color: #f8d7da; color: #a71d2a; }
     }
 }
+
+.o_df_approval_stepper {
+    display: flex;
+    align-items: center;
+    max-width: 520px;
+    padding: 8px 0 16px;
+
+    .o_df_stepper_step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.8rem;
+        color: #6c757d;
+        white-space: nowrap;
+    }
+    .o_df_stepper_dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background-color: #ced4da;
+        display: inline-block;
+    }
+    .o_df_stepper_connector {
+        flex: 1;
+        height: 2px;
+        background-color: #ced4da;
+        margin: 0 4px 18px;
+        min-width: 24px;
+        &.o_df_stepper_done { background-color: #28a745; }
+    }
+    .o_df_approval_node_done {
+        color: #1e7e34;
+        .o_df_stepper_dot { background-color: #28a745; }
+    }
+    .o_df_approval_node_current {
+        color: #85640a;
+        font-weight: 600;
+        .o_df_stepper_dot { background-color: #ffc107; }
+    }
+    .o_df_approval_node_rejected {
+        color: #a71d2a;
+        .o_df_stepper_dot { background-color: #dc3545; }
+    }
+    .o_df_approval_node_revision {
+        color: #85640a;
+        .o_df_stepper_dot { background-color: #ffc107; }
+    }
+    .o_df_approval_node_waiting, .o_df_approval_node_upcoming {
+        .o_df_stepper_dot { background-color: #ced4da; }
+    }
+}
+
+.o_df_step_actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.o_df_step_badge {
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+
+    &.o_df_step_badge_waiting { background-color: #e9ecef; color: #6c757d; }
+    &.o_df_step_badge_approved { background-color: #d4edda; color: #1e7e34; }
+    &.o_df_step_badge_rejected { background-color: #f8d7da; color: #a71d2a; }
+    &.o_df_step_badge_revision { background-color: #fff3cd; color: #85640a; }
+}

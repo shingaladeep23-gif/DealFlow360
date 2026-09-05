@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.ApprovalStepper">
+        <div class="o_df_approval_stepper">
+            <t t-foreach="steps" t-as="step" t-key="step_index">
+                <div class="o_df_stepper_step" t-att-class="'o_df_approval_node_' + step.status">
+                    <span class="o_df_stepper_dot"/>
+                    <span class="o_df_stepper_label" t-esc="step.label"/>
+                </div>
+                <div t-if="!step_last" class="o_df_stepper_connector" t-att-class="step.status === 'done' ? 'o_df_stepper_done' : ''"/>
+            </t>
+        </div>
+    </t>
+</templates>

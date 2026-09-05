@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.ApprovalStepActions">
+        <div class="o_df_step_actions">
+            <t t-if="isPending">
+                <button class="btn btn-sm btn-success" t-on-click.stop="onApprove">Approve</button>
+                <button class="btn btn-sm btn-outline-warning" t-on-click.stop="onRequestRevision">Request Revision</button>
+                <button class="btn btn-sm btn-outline-danger" t-on-click.stop="onReject">Reject</button>
+            </t>
+            <t t-else="">
+                <span t-attf-class="o_df_step_badge o_df_step_badge_#{state}" t-esc="stateLabel"/>
+            </t>
+        </div>
+    </t>
+</templates>

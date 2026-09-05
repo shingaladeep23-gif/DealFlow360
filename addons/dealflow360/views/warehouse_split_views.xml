@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- DF-011 (minimal, backend-owned): Screens 5/6 need a real click-path
+         to demo DF-010's allocation engine before Don's polished OWL
+         dashboard lands. Kept intentionally plain - Don may still replace
+         this with the two-table OWL screen from docs/ui_spec.md without
+         touching any DF-010 model or logic. -->
+
+    <record id="view_dealflow_warehouse_split_form" model="ir.ui.view">
+        <field name="name">dealflow.warehouse.split.form</field>
+        <field name="model">dealflow.warehouse.split</field>
+        <field name="arch" type="xml">
+            <form string="Fulfillment">
+                <header>
+                    <button name="action_confirm" type="object" string="Accept Suggested Split"
+                            class="btn-primary" invisible="state == 'confirmed'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,confirmed"/>
+                </header>
+                <sheet>
+                    <div class="alert alert-warning" role="alert" invisible="not df_recommendation_note">
+                        <field name="df_recommendation_note" nolabel="1"/>
+                    </div>
+                    <group>
+                        <field name="order_id" readonly="1"/>
+                        <field name="shipment_count" readonly="1"/>
+                        <field name="has_backorder" readonly="1"/>
+                    </group>
+                    <field name="line_ids" readonly="state == 'confirmed'">
+                        <tree string="Allocation" editable="bottom">
+                            <field name="product_id" readonly="1"/>
+                            <field name="warehouse_id"/>
+                            <field name="qty"/>
+                            <field name="df_estimated_cost"/>
+                            <field name="is_backorder" widget="boolean_toggle"/>
+                            <field name="picking_id" readonly="1"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_dealflow_warehouse_split_list" model="ir.ui.view">
+        <field name="name">dealflow.warehouse.split.list</field>
+        <field name="model">dealflow.warehouse.split</field>
+        <field name="arch" type="xml">
+            <tree string="Orders Awaiting Fulfillment">
+                <field name="order_id"/>
+                <field name="partner_id"/>
+                <field name="state"/>
+                <field name="shipment_count"/>
+                <field name="has_backorder"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_dealflow_warehouse_split" model="ir.actions.act_window">
+        <field name="name">Fulfillment</field>
+        <field name="res_model">dealflow.warehouse.split</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem id="menu_dealflow_fulfillment" name="Fulfillment" parent="menu_dealflow_root"
+              action="action_dealflow_warehouse_split" sequence="40"
+              groups="group_dealflow_sales_rep"/>
+</odoo>
