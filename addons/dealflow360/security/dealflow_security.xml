@@ -43,11 +43,19 @@
              instead of narrowing it. Only a global rule genuinely restricts.
              Ownership-based (partner_id / commercial partner + children), not
              follower-based - deliberately not reusing Odoo's native
-             follower-scoped "Portal Personal Sales Orders" rule (DEC-007). -->
+             follower-scoped "Portal Personal Sales Orders" rule (DEC-007).
+
+             P0 fix: a GLOBAL rule ANDs against every non-superuser, internal
+             staff included, so without an exemption a Sales Manager could
+             read zero quotations (own commercial partner is never the
+             customer's). Gate on user.share (true only for portal/public
+             users) so internal users are unaffected by this rule and portal
+             users stay locked to their own records - domain_force is eval'd
+             as Python with `user` in scope, so the conditional is legitimate. -->
         <record id="rule_dealflow_portal_sale_order_own" model="ir.rule">
             <field name="name">DealFlow360: portal users see only their own quotations</field>
             <field name="model_id" ref="sale.model_sale_order"/>
-            <field name="domain_force">[('partner_id', 'child_of', [user.commercial_partner_id.id])]</field>
+            <field name="domain_force">[('partner_id', 'child_of', [user.commercial_partner_id.id])] if user.share else [(1, '=', 1)]</field>
             <field name="perm_read">1</field>
             <field name="perm_write">0</field>
             <field name="perm_create">0</field>
@@ -62,7 +70,10 @@
         <record id="rule_dealflow_portal_negotiation_own" model="ir.rule">
             <field name="name">DealFlow360: portal users see only their own negotiations</field>
             <field name="model_id" ref="model_dealflow_negotiation"/>
-            <field name="domain_force">[('order_id.partner_id', 'child_of', [user.commercial_partner_id.id])]</field>
+            <!-- Same P0 fix as the sale.order rule above: this is also a
+                 GLOBAL rule, so without the user.share gate it would also
+                 hide every negotiation from internal staff. -->
+            <field name="domain_force">[('order_id.partner_id', 'child_of', [user.commercial_partner_id.id])] if user.share else [(1, '=', 1)]</field>
             <field name="perm_read">1</field>
             <field name="perm_write">0</field>
             <field name="perm_create">0</field>
