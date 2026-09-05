@@ -34,10 +34,13 @@
               groups="group_dealflow_sales_rep,group_dealflow_finance"/>
     <menuitem id="menu_dealflow_invoices" name="Invoices" parent="menu_dealflow_root" sequence="60"
               groups="group_dealflow_sales_rep,group_dealflow_finance"/>
+    <!-- DF-017/018 (Deal Health, Reports) are not implemented - hidden
+         rather than left as dead menu items or backed by a placeholder
+         screen. Re-enable (drop active="0") once either lands. -->
     <menuitem id="menu_dealflow_deal_health" name="Deal Health" parent="menu_dealflow_root" sequence="70"
-              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
+              groups="group_dealflow_sales_rep,group_dealflow_finance" active="0"/>
     <menuitem id="menu_dealflow_reports" name="Reports" parent="menu_dealflow_root" sequence="80"
-              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
+              groups="group_dealflow_sales_rep,group_dealflow_finance" active="0"/>
     <menuitem id="menu_dealflow_products" name="Products" parent="menu_dealflow_root"
               action="action_dealflow_product_template" sequence="90"
               groups="group_dealflow_sales_rep"/>

@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Demo-polish task (2026-09-05): Subscriptions menu had no action -
+         wire it to the real DF-012 model instead of leaving a dead menu
+         item. dealflow.billing.schedule is one real scheduled/invoiced
+         billing event per recurring order line (see models/recurring.py) -
+         the closest honest "subscriptions activity" list available today;
+         no OWL screen, plain tree/form only per instructions. Deal Health
+         and Reports menus are hidden (active=False) in dealflow_menus.xml
+         edit below - DF-017/018 are not implemented, no placeholder
+         screens. -->
+    <record id="view_billing_schedule_list" model="ir.ui.view">
+        <field name="name">dealflow.billing.schedule.list</field>
+        <field name="model">dealflow.billing.schedule</field>
+        <field name="arch" type="xml">
+            <tree string="Subscriptions" decoration-muted="state == 'cancelled'"
+                  decoration-success="state == 'invoiced'">
+                <field name="order_id"/>
+                <field name="order_line_id"/>
+                <field name="partner_id"/>
+                <field name="date"/>
+                <field name="amount" widget="monetary"/>
+                <field name="df_is_proration"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'invoiced'"
+                       decoration-info="state == 'pending'"
+                       decoration-muted="state == 'cancelled'"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_billing_schedule_form" model="ir.ui.view">
+        <field name="name">dealflow.billing.schedule.form</field>
+        <field name="model">dealflow.billing.schedule</field>
+        <field name="arch" type="xml">
+            <form string="Billing Schedule Entry">
+                <sheet>
+                    <group col="2">
+                        <field name="order_id" readonly="1"/>
+                        <field name="order_line_id" readonly="1"/>
+                        <field name="partner_id" readonly="1"/>
+                        <field name="date"/>
+                        <field name="amount" widget="monetary"/>
+                        <field name="currency_id" invisible="1"/>
+                        <field name="df_is_proration"/>
+                        <field name="state" widget="badge"
+                               decoration-success="state == 'invoiced'"
+                               decoration-info="state == 'pending'"
+                               decoration-muted="state == 'cancelled'"/>
+                        <field name="invoice_id" readonly="1"/>
+                    </group>
+                    <button name="action_invoice_now" type="object" string="Generate Invoice Now"
+                            class="btn-primary" invisible="state != 'pending'"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_billing_schedule_search" model="ir.ui.view">
+        <field name="name">dealflow.billing.schedule.search</field>
+        <field name="model">dealflow.billing.schedule</field>
+        <field name="arch" type="xml">
+            <search string="Subscriptions">
+                <field name="order_id"/>
+                <field name="partner_id"/>
+                <filter name="pending" string="Pending" domain="[('state', '=', 'pending')]"/>
+                <filter name="invoiced" string="Invoiced" domain="[('state', '=', 'invoiced')]"/>
+                <filter name="cancelled" string="Cancelled" domain="[('state', '=', 'cancelled')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_partner" string="Customer" context="{'group_by': 'partner_id'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_dealflow_subscriptions" model="ir.actions.act_window">
+        <field name="name">Subscriptions</field>
+        <field name="res_model">dealflow.billing.schedule</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_billing_schedule_search"/>
+    </record>
+
+    <menuitem id="menu_dealflow_subscriptions"
+              parent="menu_dealflow_root"
+              action="action_dealflow_subscriptions"
+              sequence="50"/>
+</odoo>
