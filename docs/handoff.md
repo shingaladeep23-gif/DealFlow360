@@ -6,6 +6,58 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-002 — Quotation Core: sale.order/sale.order.line governance fields — Atlas — 2026-09-05
+
+**Completed work**
+- `sale.order.line` extended (`models/sale_order_line.py`) with:
+  - `df_effective_ceiling` (float, computed, stored) = `min(customer tier ceiling, product category ceiling)`.
+  - `df_excess_points` (float, computed, stored) = points by which the rep's discount exceeds the ceiling, **measured against the pricelist price per DEC-009**, not the catalogue list price (see "Known issues" for exactly how).
+  - `df_margin_pct` (float, computed, stored) = real live margin `(price_subtotal - qty*standard_price) / price_subtotal`.
+- `sale.order` extended (`models/sale_order.py`) with:
+  - `df_margin_pct` (float, computed, stored) = order-level aggregate margin across non-display-type lines.
+  - `df_pipeline_stage` (Selection, computed, stored) = `draft`/`pending_approval`/`approved`/`negotiation`/`confirmed`, currently only distinguishing `confirmed` (state=`sale`) from `draft` (everything else) — a deliberate seam for DF-004 (approval → pending_approval/approved) and DF-014/015 (negotiation) to extend, per the task's explicit instruction not to invent those buckets early.
+- **DEC-009 compliance (the subtle constraint):** `df_excess_points` is NOT computed as `discount - ceiling` against the catalogue price. Instead, `SaleOrderLine._df_reference_price()` independently resolves "what this tier should pay" via `product.with_context(pricelist=order.pricelist_id.id, ...).price` (falling back to `product.list_price` when no pricelist applies), then derives the rep's true additional discount as `(reference_price - actual_paid_unit_price) / reference_price * 100`, where `actual_paid_unit_price = price_unit * (1 - discount/100)`. This is policy-independent: it gives the correct answer regardless of whether a future pricelist is configured with `discount_policy='with_discount'` or `'without_discount'`, because it measures against the *reconstructed reference price*, never against whatever Odoo happened to split `price_unit`/`discount` into internally. No pricelist seed data was added (not required this task); the no-pricelist path degrades to exactly the catalogue-price behaviour and was verified against the worked examples.
+- **DEC-010 compliance:** no routing threshold (e.g. `40`) appears anywhere in this task's code — DF-002 only produces the ceiling/excess/margin *inputs*; DF-003 will read `ir.config_parameter` key `dealflow.risk_high_min` for routing, not a constant.
+- `views/sale_order_views.xml` (new): minimal field placement only, per task boundaries — adds the three line fields as extra (hidden-by-default, `optional="show"`) columns on the order line tree, and a "DealFlow360" notebook page on the order form showing `df_margin_pct` / `df_pipeline_stage`. Not the real quotation builder (Don owns that per `docs/ui_spec.md`).
+- `tests/test_sale_order_governance.py` (new, 8 tests): both problem-statement worked examples, recompute-on-discount-change, recompute-on-quantity/price-change, tier-stricter-than-category (Beta/Silver + ProBook/Hardware), category-stricter-than-tier (Acme/Gold + Setup Service/Services), margin-is-real-not-placeholder, and draft/confirmed pipeline stage transition.
+
+**Important files**
+- `addons/dealflow360/models/sale_order_line.py`, `sale_order.py` (new)
+- `addons/dealflow360/models/__init__.py` (updated import order)
+- `addons/dealflow360/views/sale_order_views.xml` (new), `__manifest__.py` (registered)
+- `addons/dealflow360/tests/test_sale_order_governance.py` (new), `tests/__init__.py` (updated)
+
+**Current state**
+- Verified live against Odoo 17.0 + PostgreSQL 15, three ways: (1) `-u dealflow360 --stop-after-init` upgrade on the existing DF-001 database — 0 errors, xpath targets (`sale.view_order_form`'s embedded order_line tree and notebook) resolved correctly on the first try; (2) a truly fresh `-i dealflow360 --stop-after-init` install from scratch (dropped the DB first) — 0 errors, confirming the post_init_hook + new fields coexist cleanly on a clean install, not just an upgrade path; (3) `-u dealflow360 --test-enable --stop-after-init` on top of that fresh install — **0 failed, 0 error(s) of 12 tests** (4 from DF-001 + 8 new).
+- **Both problem-statement worked examples hold exactly, confirmed by passing tests, not just eyeballed:**
+  - Acme Corp (Gold, 15%) + ProBook Laptop (Hardware, ceiling 15) at 12% → `df_effective_ceiling=15.0`, `df_excess_points=0.0` (within limit).
+  - Acme Corp (Gold, 15%) + Onsite Setup Service (Services, ceiling 10) at 18% → `df_effective_ceiling=10.0`, `df_excess_points=8.0` (the spec's canonical "Gold customer, but Services are stricter" case).
+- `docker compose ps` shows both containers healthy; this was all done in the same live session as DF-001c, no new blockers.
+
+**Dependencies**
+- DF-003 (blended risk engine) consumes `df_excess_points` and `df_effective_ceiling` per line directly — no further plumbing needed from DF-002's side.
+- DF-005b/c (Don's quotation builder + pipeline Kanban) can now read real `df_effective_ceiling`/`df_excess_points`/`df_margin_pct`/`df_pipeline_stage` instead of placeholders.
+
+**Known issues**
+- `df_pipeline_stage` only distinguishes draft/confirmed today, as explicitly scoped — DF-004 and DF-014/015 must extend `_compute_df_pipeline_stage`'s `@api.depends` and logic when their fields exist; it is not a bug, it is the intended seam.
+- The pricelist-aware reference price in `_df_reference_price()` is exercised in this task only via the no-pricelist degrade path (no tier pricelists exist yet — DEC-009 doesn't require seeding them for DF-002). Whoever seeds real tier pricelists (unassigned so far) should re-run `test_worked_example_probook_within_ceiling`/`test_worked_example_setup_service_over_ceiling` afterward to confirm the pricelist branch still gives the same answers, since that branch's exact behaviour under a configured pricelist wasn't separately exercised.
+- `product.with_context(pricelist=...).price` is the standard, long-stable Odoo pattern for "resolve this product's price under this pricelist" (used by website_sale and others) — correct on 17.0, but flagging since it's the one part of this task not exercised under a real non-trivial pricelist rule (see above).
+
+**Remaining work**
+- DF-003 (blended risk scoring engine per DEC-003 + DEC-010's configurable threshold) is next.
+- Tier pricelists (DEC-009) remain unseeded; not blocking, but should land before a demo that showcases pricelist + ceiling interacting.
+
+**Recommended next task**
+- DF-003, assigned to Atlas (per god's message, released together with DF-005b to Don once this report lands).
+
+**Tests performed**
+- `docker compose exec odoo odoo -d dealflow360 -u dealflow360 --stop-after-init` — clean upgrade, 0 errors.
+- `docker compose exec db psql ... DROP DATABASE dealflow360` + `docker compose exec odoo odoo -d dealflow360 -i dealflow360 --stop-after-init` — clean fresh install, 0 errors.
+- `docker compose exec odoo odoo -d dealflow360 -u dealflow360 --test-enable --stop-after-init` on the fresh install — `0 failed, 0 error(s) of 12 tests`.
+- `python -m py_compile` / `xml.dom.minidom.parse` on every changed `.py`/`.xml` file before the live run — all clean.
+
+---
+
 ## DF-001c — Live install verification, one real bug found and fixed — Atlas — 2026-09-05
 
 Docker Desktop's Linux engine came back after the human rebooted (root cause: `VirtualMachinePlatform` was stuck `EnablePending`, fixed by restart — not an Odoo/addon issue). This entry closes out DF-001's open verification with real results instead of speculation, and replaces the "Known issues" list in the DF-001 entry below (kept for history, but treat this entry as current truth).

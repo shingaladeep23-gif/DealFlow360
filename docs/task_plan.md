@@ -15,7 +15,7 @@
 ## Phase 2 — Quotation Core
 | ID | Task | Agent | Status |
 |---|---|---|---|
-| DF-002 | Extend `sale.order` / `sale.order.line`: tier + category ceilings, per-line excess, live margin | Atlas | ⬜ |
+| DF-002 | Extend `sale.order` / `sale.order.line`: tier + category ceilings, per-line excess, live margin | Atlas | ✅ |
 
 ## Phase 3 — Discount / Risk / Approval  ← **vertical slice target**
 | ID | Task | Agent | Status |
@@ -65,8 +65,8 @@
 
 ## Current state
 
-- **Current:** DF-001 done — Docker fixed (human reboot resolved a stuck `VirtualMachinePlatform` state), stack verified live: clean install, clean upgrade, all 4 unit tests pass, all 4 seeded facts confirmed in the database (see `docs/handoff.md` DF-001c). One real bug found and fixed: `product.template.is_storable` doesn't exist on Odoo 17.0 — Odoo 17 Community uses `type='product'` for storable goods, not the Odoo 18 `is_storable` field.
-- **Next:** DF-002 → DF-003 → DF-004 (backend vertical slice), then Don picks up UI per `docs/ui_spec.md`
+- **Current:** DF-002 done — `sale.order`/`sale.order.line` governance fields (`df_effective_ceiling`, `df_excess_points`, `df_margin_pct`, `df_pipeline_stage`) live, both problem-statement worked examples confirmed by passing tests, DEC-009 (pricelist-aware excess) and DEC-010 (no hardcoded threshold) respected. See `docs/handoff.md` DF-002 entry.
+- **Next:** DF-003 (blended risk engine, DEC-003 + configurable threshold DEC-010) → DF-004 (approval chain), then Don picks up DF-005b/c per `docs/ui_spec.md`
 - **Blocked:** none
 
 ## Acceptance criteria summary
