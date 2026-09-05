@@ -33,4 +33,11 @@ def migrate(cr, version):
         [("order_fingerprint", "=", False)]
     )
     for approval in approvals:
-        approval.order_fingerprint = approval.order_id.df_governance_fingerprint
+        # order_fingerprint is a GUARDED_APPROVAL_FIELD: dealflow.approval.write()
+        # rejects it outside the decision engine context, so a plain assignment
+        # here raised UserError and aborted the whole upgrade - the module could
+        # not be installed past 17.0.1.3.0 at all. _df_engine() is the same
+        # recordset the routing code itself uses.
+        approval._df_engine().write(
+            {"order_fingerprint": approval.order_id.df_governance_fingerprint}
+        )
