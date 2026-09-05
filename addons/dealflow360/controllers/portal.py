@@ -59,6 +59,19 @@ class DealflowPortal(CustomerPortal):
             return _("Sent")
         return _("Draft")
 
+    def _dealflow_portal_status_badge_class(self, order, has_negotiation):
+        """Same inputs as _dealflow_portal_status, kept separate so the CSS
+        class never depends on the translated label text."""
+        if order.state == "cancel":
+            return "o_df_portal_badge_cancelled"
+        if order.state == "sale":
+            return "o_df_portal_badge_confirmed"
+        if has_negotiation:
+            return "o_df_portal_badge_negotiation"
+        if order.state == "sent":
+            return "o_df_portal_badge_sent"
+        return "o_df_portal_badge_draft"
+
     @http.route(["/my/quotations", "/my/quotations/page/<int:page>"], type="http", auth="user", website=True)
     def dealflow_portal_quotations(self, page=1, **kwargs):
         Order = request.env["sale.order"]
@@ -82,20 +95,31 @@ class DealflowPortal(CustomerPortal):
             .search([("order_id", "in", orders.ids)])
             .mapped("order_id.id")
         )
-        statuses = {
-            order.id: self._dealflow_portal_status(order, order.id in negotiated_order_ids)
-            for order in orders
-        }
+        statuses = {}
+        status_classes = {}
+        for order in orders:
+            has_negotiation = order.id in negotiated_order_ids
+            statuses[order.id] = self._dealflow_portal_status(order, has_negotiation)
+            status_classes[order.id] = self._dealflow_portal_status_badge_class(order, has_negotiation)
         return request.render(
             "dealflow360.portal_my_quotations",
             {
                 "orders": orders,
                 "statuses": statuses,
+                "status_classes": status_classes,
                 "pager": pager,
                 "page_name": "quotation",
                 "default_url": "/my/quotations",
             },
         )
+
+    def _dealflow_confirm_blocked(self, order):
+        """Whether the Confirm button should render disabled. Reflects only
+        the yes/no fact that a chain is outstanding - never the role, step
+        or score behind it (AT-08 forbids exposing approval-chain internals
+        to the customer)."""
+        approval = order.df_approval_id
+        return bool(approval) and approval.state != "approved"
 
     @http.route(["/my/quotation/<int:order_id>"], type="http", auth="user", website=True)
     def dealflow_portal_quotation_detail(self, order_id, access_token=None, **kwargs):
@@ -107,12 +131,23 @@ class DealflowPortal(CustomerPortal):
         negotiations = request.env["dealflow.negotiation"].sudo().search(
             [("order_id", "=", order_sudo.id)], order="create_date desc"
         )
+        # Only message_type == 'comment' ever reaches the portal - internal
+        # audit notes (the counter-discount/confirm-attempt log lines this
+        # controller itself posts) default to 'note' and are filtered out
+        # here by construction, not by an extra flag.
+        comments = order_sudo.sudo().message_ids.filtered(
+            lambda m: m.message_type == "comment"
+        ).sorted("date")
+        has_negotiation = bool(negotiations)
         return request.render(
             "dealflow360.portal_my_quotation_detail",
             {
                 "order": order_sudo,
-                "portal_status": self._dealflow_portal_status(order_sudo, bool(negotiations)),
+                "portal_status": self._dealflow_portal_status(order_sudo, has_negotiation),
+                "portal_status_class": self._dealflow_portal_status_badge_class(order_sudo, has_negotiation),
                 "negotiations": negotiations,
+                "comments": comments,
+                "confirm_blocked": self._dealflow_confirm_blocked(order_sudo),
                 "page_name": "quotation",
             },
         )

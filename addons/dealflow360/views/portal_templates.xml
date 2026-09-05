@@ -1,5 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- Inlined rather than added to the shared assets manifest/dealflow.scss
+         bundle - both are being actively edited by other agents right now
+         and this keeps the portal's styling entirely inside files only Pam
+         touches. Screen 11 (customer portal negotiation) per Mockup.jpeg;
+         DF-014 delegates its exact design to this screen's owner. -->
+    <template id="portal_dealflow_style" name="DealFlow360: portal styles">
+        <style>
+            .o_df_portal { max-width: 900px; }
+            .o_df_portal .o_df_portal_header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+            .o_df_portal .o_df_portal_eyebrow { color: #6c757d; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+            .o_df_portal .o_df_portal_title { margin: 2px 0 0; font-weight: 600; }
+            .o_df_portal .o_df_portal_card { background-color: #fff; border: 1px solid #e2e5e9; border-radius: 8px; padding: 20px 22px; margin-bottom: 20px; }
+            .o_df_portal .o_df_portal_card h5 { font-weight: 600; margin-bottom: 12px; }
+            .o_df_portal .o_df_portal_negotiate_card { border-left: 4px solid #4a6cf7; }
+            .o_df_portal_badge { display: inline-block; font-weight: 600; font-size: 0.8rem; padding: 3px 12px; border-radius: 12px; white-space: nowrap; }
+            .o_df_portal_badge.o_df_portal_badge_lg { font-size: 0.9rem; padding: 5px 16px; }
+            .o_df_portal_badge.o_df_portal_badge_draft { background-color: #e9ecef; color: #495057; }
+            .o_df_portal_badge.o_df_portal_badge_sent { background-color: #d6e4ff; color: #1849a9; }
+            .o_df_portal_badge.o_df_portal_badge_negotiation { background-color: #fff3cd; color: #85640a; }
+            .o_df_portal_badge.o_df_portal_badge_confirmed { background-color: #d4edda; color: #1e7e34; }
+            .o_df_portal_badge.o_df_portal_badge_cancelled { background-color: #f8d7da; color: #a71d2a; }
+            .o_df_portal_lines_table { width: 100%; border-collapse: collapse; }
+            .o_df_portal_lines_table th { text-align: left; font-size: 0.8rem; text-transform: uppercase; color: #6c757d; padding: 8px 6px; border-bottom: 2px solid #eef0f2; }
+            .o_df_portal_lines_table td { padding: 10px 6px; border-bottom: 1px solid #f1f2f4; }
+            .o_df_portal_lines_table tbody tr:nth-child(even) { background-color: #fafbfc; }
+            .o_df_portal_lines_table tfoot td { border-bottom: none; border-top: 2px solid #eef0f2; font-weight: 600; padding-top: 12px; }
+            .o_df_portal_total_value { font-size: 1.1rem; color: #1f2430; }
+            .o_df_portal_discount_pill { display: inline-block; background-color: #fff3cd; color: #85640a; border-radius: 10px; padding: 1px 8px; font-size: 0.85rem; font-weight: 600; }
+            .o_df_portal_discount_input { max-width: 320px; }
+            .o_df_portal_btn_primary { background-color: #4a6cf7; border-color: #4a6cf7; color: #fff; font-weight: 600; }
+            .o_df_portal_btn_primary:hover { background-color: #3a5ce0; border-color: #3a5ce0; color: #fff; }
+            .o_df_portal_btn_confirm { background-color: #28a745; border-color: #28a745; color: #fff; font-weight: 600; padding: 8px 22px; }
+            .o_df_portal_btn_confirm:hover:not(:disabled) { background-color: #23923e; border-color: #23923e; color: #fff; }
+            .o_df_portal_btn_confirm:disabled { background-color: #ced4da; border-color: #ced4da; color: #6c757d; cursor: not-allowed; }
+            .o_df_portal_btn_secondary { background-color: #f1f2f4; border-color: #e2e5e9; color: #495057; font-weight: 600; }
+            .o_df_portal_btn_secondary:hover { background-color: #e9ecef; border-color: #e2e5e9; color: #495057; }
+            .o_df_portal_confirm_note { margin-top: 10px; color: #85640a; background-color: #fff8e1; border: 1px solid #f0d78c; border-radius: 6px; padding: 8px 12px; font-size: 0.9rem; }
+            .o_df_portal_confirmed_banner { background-color: #d4edda; color: #1e7e34; border: 1px solid #b9dfc4; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; font-weight: 600; }
+            .o_df_portal_timeline { list-style: none; padding: 0; margin: 0; }
+            .o_df_portal_timeline_item { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f1f2f4; }
+            .o_df_portal_timeline_item:last-child { border-bottom: none; }
+            .o_df_portal_timeline_dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; background-color: #ced4da; }
+            .o_df_portal_timeline_proposed .o_df_portal_timeline_dot { background-color: #6c757d; }
+            .o_df_portal_timeline_applied .o_df_portal_timeline_dot { background-color: #28a745; }
+            .o_df_portal_timeline_requires_reapproval .o_df_portal_timeline_dot { background-color: #ffc107; }
+            .o_df_portal_timeline_rejected .o_df_portal_timeline_dot { background-color: #dc3545; }
+            .o_df_portal_timeline_body { flex: 1; }
+            .o_df_portal_timeline_state { display: inline-block; margin-left: 8px; font-size: 0.85rem; color: #6c757d; }
+            .o_df_portal_timeline_date { font-size: 0.8rem; color: #adb5bd; }
+            .o_df_portal_thread { list-style: none; padding: 0; margin: 0 0 16px; }
+            .o_df_portal_thread_item { padding: 10px 12px; border-radius: 8px; background-color: #f8f9fa; margin-bottom: 8px; }
+            .o_df_portal_thread_meta { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; }
+            .o_df_portal_thread_date { color: #adb5bd; }
+            .o_df_portal_thread_body { font-size: 0.95rem; }
+            .o_df_portal_thread_body p { margin: 0; }
+        </style>
+    </template>
+
     <template id="portal_my_home_dealflow_quotation" name="Portal My Home: Quotations link" inherit_id="portal.portal_my_home">
         <xpath expr="//div[hasclass('o_portal_docs')]" position="inside">
             <t t-call="portal.portal_docs_entry">
@@ -13,12 +71,13 @@
     <template id="portal_my_quotations" name="My Quotations">
         <t t-call="portal.portal_layout">
             <t t-set="breadcrumbs_searchbar" t-value="True"/>
-            <div class="o_portal_my_doc_table">
+            <t t-call="dealflow360.portal_dealflow_style"/>
+            <div class="o_df_portal o_portal_my_doc_table">
                 <t t-if="not orders">
                     <p class="alert alert-warning">There are no quotations to display.</p>
                 </t>
                 <t t-else="">
-                    <table class="table table-hover o_portal_my_doc_table">
+                    <table class="table table-hover o_df_portal_table o_portal_my_doc_table">
                         <thead>
                             <tr class="active">
                                 <th>Quotation #</th>
@@ -30,14 +89,13 @@
                         <tbody>
                             <tr t-foreach="orders" t-as="order">
                                 <td>
-                                    <a t-attf-href="/my/quotation/#{order.id}">
+                                    <a t-attf-href="/my/quotation/#{order.id}" class="o_df_portal_link">
                                         <t t-esc="order.name"/>
                                     </a>
                                 </td>
                                 <td><span t-field="order.date_order" t-options="{'widget': 'date'}"/></td>
                                 <td>
-                                    <span t-esc="statuses[order.id]"
-                                          t-attf-class="badge text-bg-#{'success' if order.state == 'sale' else 'info'}"/>
+                                    <span t-esc="statuses[order.id]" t-attf-class="o_df_portal_badge #{status_classes[order.id]}"/>
                                 </td>
                                 <td class="text-end">
                                     <span t-field="order.amount_total" t-options="{'widget': 'monetary', 'display_currency': order.currency_id}"/>
@@ -54,15 +112,18 @@
     <template id="portal_my_quotation_detail" name="Quotation Detail">
         <t t-call="portal.portal_layout">
             <t t-set="breadcrumbs_searchbar" t-value="False"/>
-            <div class="row">
-                <div class="col-12">
-                    <h3>
-                        Quotation <t t-esc="order.name"/>
-                        <span t-esc="portal_status"
-                              t-attf-class="badge text-bg-#{'success' if order.state == 'sale' else 'info'} ms-2"/>
-                    </h3>
+            <t t-call="dealflow360.portal_dealflow_style"/>
+            <div class="o_df_portal">
+                <div class="o_df_portal_header">
+                    <div>
+                        <div class="o_df_portal_eyebrow">Quotation</div>
+                        <h2 class="o_df_portal_title"><t t-esc="order.name"/></h2>
+                    </div>
+                    <span t-esc="portal_status" t-attf-class="o_df_portal_badge o_df_portal_badge_lg #{portal_status_class}"/>
+                </div>
 
-                    <table class="table">
+                <div class="o_df_portal_card">
+                    <table class="o_df_portal_lines_table">
                         <thead>
                             <tr>
                                 <th>Description</th>
@@ -76,7 +137,10 @@
                                 <tr t-if="not line.display_type">
                                     <td><t t-esc="line.name"/></td>
                                     <td class="text-end"><t t-esc="line.product_uom_qty"/></td>
-                                    <td class="text-end"><t t-esc="line.discount"/>%</td>
+                                    <td class="text-end">
+                                        <span t-if="line.discount" class="o_df_portal_discount_pill"><t t-esc="'%.1f' % line.discount"/>%</span>
+                                        <span t-else="" class="text-muted">—</span>
+                                    </td>
                                     <td class="text-end">
                                         <span t-field="line.price_subtotal" t-options="{'widget': 'monetary', 'display_currency': order.currency_id}"/>
                                     </td>
@@ -85,71 +149,105 @@
                         </tbody>
                         <tfoot>
                             <tr>
-                                <td colspan="3" class="text-end"><strong>Total</strong></td>
-                                <td class="text-end">
-                                    <strong><span t-field="order.amount_total" t-options="{'widget': 'monetary', 'display_currency': order.currency_id}"/></strong>
+                                <td colspan="3" class="text-end">Total</td>
+                                <td class="text-end o_df_portal_total_value">
+                                    <span t-field="order.amount_total" t-options="{'widget': 'monetary', 'display_currency': order.currency_id}"/>
                                 </td>
                             </tr>
                         </tfoot>
                     </table>
+                </div>
 
-                    <t t-if="order.state in ('draft', 'sent')">
-                        <div class="card my-3">
-                            <div class="card-body">
-                                <h5>Propose a counter-discount</h5>
-                                <form t-attf-action="/my/quotation/#{order.id}/counter" method="post">
-                                    <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                                    <div class="input-group" style="max-width: 320px;">
-                                        <input type="number" step="0.01" min="0" max="100" name="counter_discount" class="form-control" placeholder="e.g. 12" required="required"/>
-                                        <span class="input-group-text">%</span>
-                                        <button type="submit" class="btn btn-primary">Submit</button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-
-                        <form t-attf-action="/my/quotation/#{order.id}/confirm" method="post" class="mb-3">
+                <t t-if="order.state in ('draft', 'sent')">
+                    <div class="o_df_portal_card o_df_portal_negotiate_card">
+                        <h5>Propose a counter-discount</h5>
+                        <p class="text-muted mb-3">Ask for a different discount on this quotation. We'll recalculate and let you know.</p>
+                        <form t-attf-action="/my/quotation/#{order.id}/counter" method="post" class="o_df_portal_negotiate_form">
                             <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                            <button type="submit" class="btn btn-success">Confirm Quotation</button>
+                            <div class="input-group o_df_portal_discount_input">
+                                <input type="number" step="0.01" min="0" max="100" name="counter_discount" class="form-control" placeholder="e.g. 12" required="required"/>
+                                <span class="input-group-text">%</span>
+                                <button type="submit" class="btn o_df_portal_btn_primary">Submit Request</button>
+                            </div>
                         </form>
-                    </t>
 
-                    <div class="card my-3">
-                        <div class="card-body">
-                            <h5>Negotiation history</h5>
-                            <t t-if="not negotiations">
-                                <p class="text-muted">No counter-discount proposals yet.</p>
-                            </t>
-                            <ul class="list-group">
-                                <li class="list-group-item" t-foreach="negotiations" t-as="neg">
-                                    <!-- AT-08: never expose margin, internal risk score or
-                                         approval-chain internals to the customer - status
-                                         wording only, no risk_level_before/after. -->
-                                    <t t-esc="neg.counter_discount"/>% proposed —
-                                    <span t-esc="neg.state"/>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
+                        <hr/>
 
-                    <div class="card my-3">
-                        <div class="card-body">
-                            <h5>Comments &amp; change requests</h5>
-                            <form t-attf-action="/my/quotation/#{order.id}/comment" method="post">
-                                <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
-                                <div class="mb-2">
-                                    <select name="line_id" class="form-select">
-                                        <option value="">General (not line-specific)</option>
-                                        <t t-foreach="order.order_line" t-as="line">
-                                            <option t-if="not line.display_type" t-att-value="line.id"><t t-esc="line.name"/></option>
-                                        </t>
-                                    </select>
+                        <form t-attf-action="/my/quotation/#{order.id}/confirm" method="post" class="mb-0">
+                            <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                            <button type="submit" class="btn o_df_portal_btn_confirm" t-att-disabled="'disabled' if confirm_blocked else None">
+                                Confirm Quotation
+                            </button>
+                            <t t-if="confirm_blocked">
+                                <div class="o_df_portal_confirm_note">
+                                    This quotation is currently under internal review following your counter-discount request. You'll be able to confirm as soon as it's cleared.
                                 </div>
-                                <textarea name="message" class="form-control mb-2" rows="3" placeholder="Ask a question or request a change..." required="required"></textarea>
-                                <button type="submit" class="btn btn-secondary">Send</button>
-                            </form>
-                        </div>
+                            </t>
+                        </form>
                     </div>
+                </t>
+
+                <t t-if="order.state == 'sale'">
+                    <div class="o_df_portal_confirmed_banner">
+                        This quotation has been confirmed. Thank you!
+                    </div>
+                </t>
+
+                <div class="o_df_portal_card">
+                    <h5>Negotiation history</h5>
+                    <t t-if="not negotiations">
+                        <p class="text-muted mb-0">No counter-discount proposals yet.</p>
+                    </t>
+                    <ul t-else="" class="o_df_portal_timeline">
+                        <li t-foreach="negotiations" t-as="neg" t-attf-class="o_df_portal_timeline_item o_df_portal_timeline_#{neg.state}">
+                            <span class="o_df_portal_timeline_dot"/>
+                            <div class="o_df_portal_timeline_body">
+                                <strong><t t-esc="'%.1f' % neg.counter_discount"/>% discount requested</strong>
+                                <span t-attf-class="o_df_portal_timeline_state o_df_portal_timeline_state_#{neg.state}">
+                                    <t t-if="neg.state == 'proposed'">Awaiting review</t>
+                                    <t t-elif="neg.state == 'applied'">Applied</t>
+                                    <t t-elif="neg.state == 'requires_reapproval'">Applied — pending review</t>
+                                    <t t-elif="neg.state == 'rejected'">Not accepted</t>
+                                    <t t-else=""><t t-esc="neg.state"/></t>
+                                </span>
+                                <div class="o_df_portal_timeline_date">
+                                    <span t-field="neg.create_date" t-options="{'widget': 'date'}"/>
+                                </div>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="o_df_portal_card">
+                    <h5>Comments &amp; change requests</h5>
+                    <t t-if="not comments">
+                        <p class="text-muted">No questions or comments yet.</p>
+                    </t>
+                    <ul t-else="" class="o_df_portal_thread">
+                        <li t-foreach="comments" t-as="msg" class="o_df_portal_thread_item">
+                            <div class="o_df_portal_thread_meta">
+                                <strong t-esc="msg.author_id.name or 'You'"/>
+                                <span class="o_df_portal_thread_date">
+                                    <span t-field="msg.date" t-options="{'widget': 'date'}"/>
+                                </span>
+                            </div>
+                            <div class="o_df_portal_thread_body" t-raw="msg.body"/>
+                        </li>
+                    </ul>
+
+                    <form t-attf-action="/my/quotation/#{order.id}/comment" method="post" class="o_df_portal_comment_form">
+                        <input type="hidden" name="csrf_token" t-att-value="request.csrf_token()"/>
+                        <div class="mb-2">
+                            <select name="line_id" class="form-select">
+                                <option value="">General (not line-specific)</option>
+                                <t t-foreach="order.order_line" t-as="line">
+                                    <option t-if="not line.display_type" t-att-value="line.id"><t t-esc="line.name"/></option>
+                                </t>
+                            </select>
+                        </div>
+                        <textarea name="message" class="form-control mb-2" rows="3" placeholder="Ask a question or request a change..." required="required"></textarea>
+                        <button type="submit" class="btn o_df_portal_btn_secondary">Send</button>
+                    </form>
                 </div>
             </div>
         </t>
