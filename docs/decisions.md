@@ -170,3 +170,38 @@ Buckets: **≥80 Healthy · 50–79 At Risk · <50 Critical**
 - **Reason:** Raised by Don in DF-005a. The problem statement's Deal Health dashboard requires *per-signal* alerts ("stalled deals", "discount anomaly alerts", "delivery promise slippage indicators") that are individually clickable, not a single opaque number. DEC-005 computed the four penalties internally but discarded which ones fired, which would have forced the frontend to re-derive them — violating the rule that business logic never lives in JavaScript.
 - **Alternatives considered:** Score only, with the frontend inferring cause — rejected: duplicates scoring logic client-side and cannot distinguish two deals with equal scores for different reasons.
 - **Status:** Accepted
+
+---
+
+## DEC-012 — Portal isolation must use a GLOBAL `ir.rule`, because group rules OR together
+
+- **Date:** 2026-09-05
+- **Decision:** DealFlow360's portal restriction on `sale.order` is implemented as a **global** `ir.rule` (empty `groups_id`), not as a rule attached to the portal group. Its domain restricts on `partner_id` (`commercial_partner_id` of the requesting user, including child contacts). Odoo's native follower-based portal rule stays in place; controller-level token/ownership checks remain the second layer (DEC-007).
+
+- **Reason:** Raised by Pam in DF-001d. Odoo already ships an `ir.rule` — *"Portal Personal Quotations/Sales Orders"* — scoped to the `Portal` group with domain `message_partner_ids child_of user.commercial_partner_id`. Two problems:
+
+  1. **It is follower-based, not ownership-based.** `message_partner_ids` is the chatter follower set. Anyone added as a follower gains read access, and it diverges from DEC-007's stated intent of restricting on `partner_id`.
+
+  2. **The combination trap — this is the important part.** Odoo combines record rules as:
+     ```
+     final = (AND of all GLOBAL rules) AND (OR of all applicable GROUP rules)
+     ```
+     Group rules **OR** together. So adding a second, stricter rule *on the portal group* would **widen** access, not narrow it — a portal user would match either rule and pass. An engineer trying to tighten security this way would silently achieve the opposite, and the resulting hole would look like hardening in the diff.
+
+     Only a **global** rule (no `groups_id`) is AND-combined and can therefore genuinely narrow access. Hence the decision.
+
+- **Alternatives considered:**
+  - *Add a stricter rule to the portal group* — **rejected: actively harmful**, it widens access for the reason above. Recorded explicitly so nobody re-proposes it.
+  - *Modify/replace Odoo's native portal rule* — rejected: fights the framework, and a future module update or reinstall could restore it, silently reopening the hole.
+  - *Rely on controller checks only* — rejected by DEC-007; not a real boundary since other RPC paths bypass controllers.
+- **Status:** Accepted — binding on DF-014. AT-08's "customer cannot read another customer's quotation" must be proven against the ORM directly (e.g. `search_read` as a portal user), not merely through the HTTP route.
+
+---
+
+## DEC-013 — Finance gets READ on the discount governance config
+
+- **Date:** 2026-09-05
+- **Decision:** The Finance group receives read access to `dealflow.discount.tier` and `dealflow.category.limit`. Write/create/unlink on both remains **Admin-only**.
+- **Reason:** Raised by Pam in DF-001d, who found Finance had *zero* access — not even read — because no ACL row grants it and Finance's `implied_ids` do not reach Sales Rep. Finance's role in the problem statement is to handle second-level approval of high-risk discounts. An approver who cannot see the ceiling being enforced cannot meaningfully judge the exception, and the approval screen would fail to render the governance context. This was an oversight, not a deliberate restriction.
+- **Alternatives considered:** Leave Finance with no access and surface ceilings only via computed fields on `sale.order` — rejected: fragile, and it hides the actual rule from the person accountable for the exception. Grant Finance write — rejected: separation of duties, the approver must not be able to move the goalposts they are approving against.
+- **Status:** Accepted
