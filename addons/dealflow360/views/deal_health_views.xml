@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- DF-017 Deal Health screen.
+
+         The scoring engine (models/sale_order.py: _compute_deal_health and
+         its four DEC-005 signals) shipped complete, with its cron and 14
+         passing tests - but the menu for it was left active="0" behind a
+         comment reading "DF-017/018 are not implemented", and no view
+         anywhere bound a single df_health_* field. The backend was real and
+         the frontend simply had no door into it. This file is that door;
+         every column below is a stored field the engine writes. -->
+
+    <record id="view_deal_health_tree" model="ir.ui.view">
+        <field name="name">sale.order.deal.health.tree</field>
+        <field name="model">sale.order</field>
+        <field name="arch" type="xml">
+            <tree string="Deal Health" create="false"
+                  default_order="df_health_score asc"
+                  decoration-danger="df_health_status == 'critical'"
+                  decoration-warning="df_health_status == 'at_risk'"
+                  decoration-success="df_health_status == 'healthy'">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="user_id" string="Salesperson"/>
+                <field name="amount_total" widget="monetary"/>
+                <field name="df_health_score" string="Health"/>
+                <field name="df_health_status" widget="badge"
+                       decoration-success="df_health_status == 'healthy'"
+                       decoration-warning="df_health_status == 'at_risk'"
+                       decoration-danger="df_health_status == 'critical'"/>
+                <field name="df_health_flags" widget="many2many_tags"/>
+                <field name="df_health_reason" string="Why"/>
+                <field name="df_health_flagged_date" string="Flagged Since"/>
+                <field name="df_last_activity" string="Last Activity"/>
+                <field name="df_risk_level" widget="label_selection"
+                       options="{'classes': {'none': 'success', 'medium': 'warning', 'high': 'danger'}}"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_deal_health_search" model="ir.ui.view">
+        <field name="name">sale.order.deal.health.search</field>
+        <field name="model">sale.order</field>
+        <field name="arch" type="xml">
+            <search string="Deal Health">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <filter name="critical" string="Critical"
+                        domain="[('df_health_status', '=', 'critical')]"/>
+                <filter name="at_risk" string="At Risk"
+                        domain="[('df_health_status', '=', 'at_risk')]"/>
+                <filter name="healthy" string="Healthy"
+                        domain="[('df_health_status', '=', 'healthy')]"/>
+                <separator/>
+                <filter name="flagged" string="Has Any Signal"
+                        domain="[('df_health_flags', '!=', False)]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_status" string="Health Status"
+                            context="{'group_by': 'df_health_status'}"/>
+                    <filter name="group_salesperson" string="Salesperson"
+                            context="{'group_by': 'user_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_dealflow_deal_health" model="ir.actions.act_window">
+        <field name="name">Deal Health</field>
+        <field name="res_model">sale.order</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('state', 'in', ('draft', 'sent', 'sale'))]</field>
+        <field name="search_view_id" ref="view_deal_health_search"/>
+        <field name="context">{'tree_view_ref': 'dealflow360.view_deal_health_tree'}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No live deals to score yet.</p>
+            <p>Deal health is recomputed every six hours by the DF-017 cron, and
+               on demand from the Refresh button on any quotation.</p>
+        </field>
+    </record>
+
+    <!-- Re-enable the menu that was parked at active="0". -->
+    <menuitem id="menu_dealflow_deal_health"
+              parent="menu_dealflow_root"
+              action="action_dealflow_deal_health"
+              sequence="70"
+              active="1"
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
+</odoo>

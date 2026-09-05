@@ -1,6 +1,6 @@
 {
     "name": "DealFlow360",
-    "version": "17.0.1.1.0",
+    "version": "17.0.1.2.0",
     "summary": "Intelligent, self-governing B2B sales operations platform",
     "description": """
 DealFlow360
@@ -42,6 +42,7 @@ and deal health monitoring — built on native Odoo 17 Community models.
         "views/approval_views.xml",
         "views/subscription_views.xml",
         "views/warehouse_split_views.xml",
+        "views/deal_health_views.xml",
         "views/sale_order_kanban_views.xml",
         "views/portal_templates.xml",
         "views/invoice_views.xml",

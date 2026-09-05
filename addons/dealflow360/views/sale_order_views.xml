@@ -60,6 +60,39 @@
                 <field name="id" widget="dealflow_upsell_panel" nolabel="1"/>
             </xpath>
 
+            <!-- DF-017 Deal Health. The scoring engine, its four signals and
+                 its cron all landed in 30bb7a0, but nothing in the frontend
+                 ever read df_health_* - the feature existed only in Python
+                 and was invisible to every user. This card is the missing
+                 half: real stored values, plus a Refresh that runs the same
+                 _compute_deal_health() the cron does, because two of the
+                 four signals are functions of elapsed time and would
+                 otherwise only ever change every six hours. -->
+            <xpath expr="//notebook" position="before">
+                <div class="o_df_health_card" invisible="not df_health_status">
+                    <div class="o_df_health_head">
+                        <div>
+                            <div class="o_df_summary_label">Deal Health</div>
+                            <div class="o_df_summary_value">
+                                <field name="df_health_score" nolabel="1" readonly="1"/>/100
+                            </div>
+                        </div>
+                        <field name="df_health_status" widget="label_selection" nolabel="1"
+                               options="{'classes': {'healthy': 'success', 'at_risk': 'warning', 'critical': 'danger'}}"/>
+                        <button name="action_df_refresh_health" type="object"
+                                string="Refresh" class="btn btn-secondary btn-sm"/>
+                    </div>
+                    <field name="df_health_flags" widget="many2many_tags" nolabel="1" readonly="1"
+                           invisible="not df_health_flags"/>
+                    <div class="o_df_health_reason" invisible="not df_health_reason">
+                        <field name="df_health_reason" nolabel="1" readonly="1"/>
+                    </div>
+                    <div class="o_df_health_since" invisible="not df_health_flagged_date">
+                        Flagged since <field name="df_health_flagged_date" nolabel="1" readonly="1"/>
+                    </div>
+                </div>
+            </xpath>
+
             <!-- Full detail tab kept for anyone auditing the raw governance
                  fields (QA, admins) alongside the compact summary above. -->
             <xpath expr="//notebook" position="inside">
@@ -70,6 +103,14 @@
                         <field name="df_blended_risk_score"/>
                         <field name="df_risk_level"/>
                         <field name="df_risk_summary"/>
+                    </group>
+                    <group string="Deal Health (DF-017)">
+                        <field name="df_health_score"/>
+                        <field name="df_health_status"/>
+                        <field name="df_health_flags" widget="many2many_tags"/>
+                        <field name="df_health_reason"/>
+                        <field name="df_health_flagged_date"/>
+                        <field name="df_last_activity"/>
                     </group>
                 </page>
             </xpath>

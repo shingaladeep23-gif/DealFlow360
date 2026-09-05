@@ -414,3 +414,33 @@
         align-self: flex-start;
     }
 }
+
+// DF-017 Deal Health card on the quotation form. Mirrors the summary-card
+// language already used by .o_df_summary_card above rather than inventing a
+// second visual vocabulary for the same kind of panel.
+.o_df_health_card {
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 0 0 12px 0;
+    background: #fbfcfd;
+
+    .o_df_health_head {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .o_df_health_reason {
+        margin-top: 8px;
+        color: #6c757d;
+        font-size: 0.9em;
+    }
+
+    .o_df_health_since {
+        margin-top: 4px;
+        color: #adb5bd;
+        font-size: 0.85em;
+    }
+}
