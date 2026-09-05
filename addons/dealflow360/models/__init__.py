@@ -9,3 +9,4 @@ from . import res_config_settings
 from . import negotiation
 from . import warehouse_split
 from . import recurring
+from . import upsell
