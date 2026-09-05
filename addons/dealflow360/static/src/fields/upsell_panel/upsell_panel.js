@@ -48,6 +48,23 @@ export class DealflowUpsellPanel extends Component {
         Object.assign(this.state, { recommendations, loading: false });
     }
 
+    async dismiss(productId) {
+        // B5 lists Dismiss beside Add to Quote. Persisted on the order
+        // (df_dismissed_upsell_product_ids) rather than held in component
+        // state, so a dismissal survives a reload instead of the suggestion
+        // reappearing on the next render.
+        this.state.adding = productId;
+        try {
+            await this.orm.call("sale.order", "action_dismiss_upsell", [
+                [this.orderId],
+                productId,
+            ]);
+            await this.loadRecommendations();
+        } finally {
+            this.state.adding = null;
+        }
+    }
+
     async addToQuote(productId) {
         this.state.adding = productId;
         try {

@@ -43,6 +43,25 @@ class SaleOrder(models.Model):
         "dealflow.audit.log.",
     )
 
+    df_audit_log_ids = fields.One2many(
+        "dealflow.audit.log",
+        "order_id",
+        string="Audit Trail",
+        readonly=True,
+        help="Every governance event on this deal - routed, approved, "
+        "rejected, revision requested, superseded by an edit, re-routed after "
+        "a negotiation. The rows were always written; until now nothing in "
+        "the UI showed them, so the problem statement's 'confirmation screen "
+        "with a full audit trail entry' had no screen.",
+    )
+    df_approval_state = fields.Selection(
+        related="df_approval_id.state",
+        string="Approval Status",
+        store=True,
+        help="Stored so the reporting screen can filter and group by it "
+        "without reaching through df_approval_id on every row.",
+    )
+
     df_negotiation_ids = fields.One2many(
         "dealflow.negotiation",
         "order_id",

@@ -17,12 +17,19 @@
                               t-esc="(rec.margin_delta_pct >= 0 ? '+' : '') + rec.margin_delta_pct.toFixed(1) + ' pts'"/>
                     </div>
                     <div class="o_df_upsell_card_reason" t-esc="rec.reason"/>
-                    <button class="btn btn-sm btn-primary o_df_upsell_add"
-                            t-att-disabled="state.adding === rec.product_id"
-                            t-on-click="() => this.addToQuote(rec.product_id)">
-                        <t t-if="state.adding === rec.product_id">Adding…</t>
-                        <t t-else="">+ Add to Quote</t>
-                    </button>
+                    <div class="o_df_upsell_card_actions">
+                        <button class="btn btn-sm btn-primary o_df_upsell_add"
+                                t-att-disabled="state.adding === rec.product_id"
+                                t-on-click="() => this.addToQuote(rec.product_id)">
+                            <t t-if="state.adding === rec.product_id">Adding…</t>
+                            <t t-else="">+ Add to Quote</t>
+                        </button>
+                        <button class="btn btn-sm btn-link o_df_upsell_dismiss"
+                                t-att-disabled="state.adding === rec.product_id"
+                                t-on-click="() => this.dismiss(rec.product_id)">
+                            Dismiss
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

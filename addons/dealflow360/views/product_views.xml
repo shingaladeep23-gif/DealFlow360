@@ -8,9 +8,23 @@
             <xpath expr="//notebook" position="inside">
                 <page string="DealFlow360" name="dealflow360">
                     <group>
-                        <field name="df_is_recurring"/>
-                        <field name="df_is_promoted"/>
-                        <field name="df_min_margin"/>
+                        <group string="Subscription">
+                            <field name="df_is_recurring"/>
+                            <!-- Every recurring behaviour keys off the PLAN, not
+                                 off df_is_recurring: MRR, the next bill date and
+                                 proration all read df_recurring_plan_id. It was
+                                 missing from this form, so a product configured
+                                 through the UI came out recurring with no plan
+                                 and simply never billed. -->
+                            <field name="df_recurring_plan_id"
+                                   invisible="not df_is_recurring"
+                                   required="df_is_recurring"
+                                   options="{'no_create_edit': True}"/>
+                        </group>
+                        <group string="Upsell">
+                            <field name="df_is_promoted"/>
+                            <field name="df_min_margin"/>
+                        </group>
                     </group>
                 </page>
             </xpath>

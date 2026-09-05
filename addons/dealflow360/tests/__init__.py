@@ -14,3 +14,4 @@ from . import test_confirm_cascade
 from . import test_upsell
 from . import test_deal_health
 from . import test_role_integration
+from . import test_spec_screens

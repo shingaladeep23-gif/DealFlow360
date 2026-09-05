@@ -104,7 +104,98 @@
             <!-- Everything behind the summary, for anyone who wants the raw
                  numbers (QA, managers auditing a decision). Kept off the main
                  sheet so the default view stays short. -->
+            <!-- B7: "one-time lines and recurring lines separately within the
+                 same order", the upcoming billing schedule, and cancel/modify
+                 controls. All of this existed in the engine; none of it was on
+                 the order, so the only way to see a subscription was a global
+                 list screen that could not show you THIS deal's hybrid split.
+                 The page hides itself entirely on an order with no recurring
+                 line, rather than showing two empty tables. -->
             <xpath expr="//notebook" position="inside">
+                <page string="Subscriptions &amp; Billing" name="dealflow_billing"
+                      invisible="not df_recurring_line_ids">
+                    <group string="Recurring lines">
+                        <field name="df_recurring_line_ids" nolabel="1" readonly="1">
+                            <tree decoration-muted="df_sub_state == 'cancelled'"
+                                  decoration-warning="df_sub_state == 'paused'">
+                                <field name="product_id"/>
+                                <field name="product_uom_qty" string="Qty"/>
+                                <field name="price_subtotal" widget="monetary"/>
+                                <field name="df_sub_state" string="Status" widget="badge"
+                                       decoration-success="df_sub_state == 'active'"
+                                       decoration-warning="df_sub_state == 'paused'"
+                                       decoration-muted="df_sub_state == 'cancelled'"/>
+                                <field name="df_sub_start_date" string="Started"/>
+                                <field name="df_sub_next_bill_date" string="Next bill"/>
+                                <field name="df_mrr" widget="monetary" string="MRR"/>
+                                <field name="currency_id" column_invisible="1"/>
+                                <button name="action_pause_subscription" type="object"
+                                        string="Pause" icon="fa-pause"
+                                        invisible="df_sub_state != 'active'"/>
+                                <button name="action_resume_subscription" type="object"
+                                        string="Resume" icon="fa-play"
+                                        invisible="df_sub_state != 'paused'"/>
+                                <button name="action_cancel_subscription" type="object"
+                                        string="Cancel" icon="fa-times"
+                                        confirm="Stop future billing for this subscription? If its plan issues credit notes, the unused part of the current period will be credited."
+                                        invisible="df_sub_state not in ('active', 'paused')"/>
+                            </tree>
+                        </field>
+                    </group>
+                    <group string="One-time lines">
+                        <field name="df_one_time_line_ids" nolabel="1" readonly="1">
+                            <tree>
+                                <field name="product_id"/>
+                                <field name="product_uom_qty" string="Qty"/>
+                                <field name="discount"/>
+                                <field name="price_subtotal" widget="monetary"/>
+                                <field name="currency_id" column_invisible="1"/>
+                            </tree>
+                        </field>
+                        <div class="o_df_screen_hint">
+                            Billed by this order's own invoice. Recurring lines above are
+                            billed on their own schedule instead, so Create Invoice never
+                            charges for them twice.
+                        </div>
+                    </group>
+                    <group string="Upcoming and past billing">
+                        <field name="df_billing_schedule_ids" nolabel="1" readonly="1">
+                            <tree decoration-muted="state == 'cancelled'"
+                                  decoration-success="state == 'invoiced'">
+                                <field name="date"/>
+                                <field name="order_line_id" string="Subscription"/>
+                                <field name="amount" widget="monetary"/>
+                                <field name="df_is_proration" string="Proration"/>
+                                <field name="state" widget="badge"
+                                       decoration-success="state == 'invoiced'"
+                                       decoration-info="state == 'pending'"
+                                       decoration-muted="state == 'cancelled'"/>
+                                <field name="invoice_id"/>
+                                <field name="currency_id" column_invisible="1"/>
+                            </tree>
+                        </field>
+                    </group>
+                </page>
+
+                <!-- B4's "confirmation screen with a full audit trail entry",
+                     and A3's requirement that approvals, rejections AND edits
+                     be logged with user, timestamp and reason. The rows were
+                     always written; nothing ever displayed them. -->
+                <page string="Audit Trail" name="dealflow_audit"
+                      invisible="not df_audit_log_ids">
+                    <field name="df_audit_log_ids" nolabel="1" readonly="1">
+                        <tree create="false" edit="false" delete="false"
+                              decoration-danger="action == 'rejected'"
+                              decoration-warning="action in ('revision_requested', 'superseded')"
+                              decoration-success="action == 'approved'">
+                            <field name="timestamp"/>
+                            <field name="user_id"/>
+                            <field name="action"/>
+                            <field name="detail"/>
+                        </tree>
+                    </field>
+                </page>
+
                 <page string="Deal Details" name="dealflow360">
                     <group>
                         <group string="Discount &amp; approval">

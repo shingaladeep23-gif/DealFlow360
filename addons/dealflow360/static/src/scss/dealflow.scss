@@ -487,3 +487,21 @@
     font-size: 0.8rem;
     margin-top: 4px;
 }
+
+// B5's Dismiss sits beside Add to Quote; it is a secondary action, so it
+// reads as a link rather than competing with the primary button.
+.o_df_upsell_card_actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.o_df_upsell_dismiss {
+    color: #6c757d;
+    text-decoration: none;
+
+    &:hover {
+        color: #343a40;
+        text-decoration: underline;
+    }
+}

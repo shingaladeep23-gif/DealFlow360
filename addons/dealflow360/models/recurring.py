@@ -105,6 +105,34 @@ class SaleOrderRecurringBilling(models.Model):
             recurring_lines._df_start_subscription()
         return res
 
+    df_billing_schedule_ids = fields.One2many(
+        "dealflow.billing.schedule", "order_id", string="Billing Schedule"
+    )
+    df_one_time_line_ids = fields.One2many(
+        "sale.order.line",
+        compute="_compute_df_line_split",
+        string="One-time lines",
+    )
+    df_recurring_line_ids = fields.One2many(
+        "sale.order.line",
+        compute="_compute_df_line_split",
+        string="Recurring lines",
+    )
+
+    @api.depends("order_line.product_id.df_is_recurring", "order_line.display_type")
+    def _compute_df_line_split(self):
+        # DF-012/B7 asks for one-time and recurring lines shown SEPARATELY
+        # within the same order. A view cannot filter a one2many by a related
+        # field, so the split is computed here rather than faked with two
+        # identical tables.
+        for order in self:
+            lines = order.order_line.filtered(
+                lambda l: not l.display_type and l.product_id
+            )
+            recurring = lines.filtered(lambda l: l.product_id.df_is_recurring)
+            order.df_recurring_line_ids = recurring
+            order.df_one_time_line_ids = lines - recurring
+
     def _get_invoiceable_lines(self, final=False):
         """A recurring line is billed by its dealflow.billing.schedule, on its
         own cycle - never by the order's native Create Invoice button.
@@ -291,6 +319,35 @@ class SaleOrderLineSubscription(models.Model):
                     old_qty[line.id], line.product_uom_qty
                 )
         return res
+
+    def action_pause_subscription(self):
+        """Stop billing without ending the subscription. 'paused' has been a
+        selection value and a filter card on the Subscriptions screen since
+        DF-012, but nothing could ever set it - the count was permanently
+        zero. Pending schedule entries are cancelled by _df_process_due_entry
+        while paused, and resuming queues the next cycle again."""
+        for line in self:
+            if not line.product_id.df_is_recurring or line.df_sub_state != "active":
+                continue
+            line.df_sub_state = "paused"
+            line.order_id.message_post(
+                body=_("Subscription for %s paused.") % line.product_id.display_name
+            )
+        return True
+
+    def action_resume_subscription(self):
+        for line in self:
+            if line.df_sub_state != "paused":
+                continue
+            line.df_sub_state = "active"
+            if not line.billing_schedule_ids.filtered(
+                lambda s: s.state == "pending"
+            ):
+                line._df_schedule_next_bill(fields.Date.context_today(line))
+            line.order_id.message_post(
+                body=_("Subscription for %s resumed.") % line.product_id.display_name
+            )
+        return True
 
     def action_cancel_subscription(self):
         """Cancel future billing for a recurring line per its plan's

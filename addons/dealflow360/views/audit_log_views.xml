@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- The problem statement asks for two things this model already had the
+         data for and no screen: A3's "all approvals, rejections and edits
+         logged with user, timestamp and reason", and B4's "confirmation
+         screen with a full audit trail entry". dealflow.audit.log had ACLs
+         and rows and nothing that displayed them. Append-only by
+         construction: no create/edit/delete anywhere here. -->
+    <record id="view_dealflow_audit_log_tree" model="ir.ui.view">
+        <field name="name">dealflow.audit.log.tree</field>
+        <field name="model">dealflow.audit.log</field>
+        <field name="arch" type="xml">
+            <tree string="Audit Trail" create="false" edit="false" delete="false"
+                  decoration-danger="action == 'rejected'"
+                  decoration-warning="action in ('revision_requested', 'superseded')"
+                  decoration-success="action == 'approved'">
+                <field name="timestamp"/>
+                <field name="order_id"/>
+                <field name="user_id"/>
+                <field name="action"/>
+                <field name="detail"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_dealflow_audit_log_search" model="ir.ui.view">
+        <field name="name">dealflow.audit.log.search</field>
+        <field name="model">dealflow.audit.log</field>
+        <field name="arch" type="xml">
+            <search string="Audit Trail">
+                <field name="order_id"/>
+                <field name="user_id"/>
+                <field name="detail"/>
+                <filter name="approved" string="Approved"
+                        domain="[('action', '=', 'approved')]"/>
+                <filter name="rejected" string="Rejected"
+                        domain="[('action', '=', 'rejected')]"/>
+                <filter name="edits" string="Edited after review"
+                        domain="[('action', '=', 'superseded')]"/>
+                <separator/>
+                <filter name="today" string="Today"
+                        domain="[('timestamp', '&gt;=', datetime.datetime.combine(context_today(), datetime.time(0,0,0)))]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_action" string="Action"
+                            context="{'group_by': 'action'}"/>
+                    <filter name="group_user" string="User"
+                            context="{'group_by': 'user_id'}"/>
+                    <filter name="group_order" string="Quotation"
+                            context="{'group_by': 'order_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_dealflow_audit_log" model="ir.actions.act_window">
+        <field name="name">Audit Trail</field>
+        <field name="res_model">dealflow.audit.log</field>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_dealflow_audit_log_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Nothing logged yet.</p>
+            <p>Every approval, rejection, revision request and post-review edit is
+               recorded here with who did it, when, and why. Entries cannot be
+               edited or deleted by anyone.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_dealflow_audit_log" name="Audit Trail"
+              parent="menu_dealflow_root"
+              action="action_dealflow_audit_log" sequence="75"
+              groups="group_dealflow_sales_manager,group_dealflow_finance"/>
+</odoo>

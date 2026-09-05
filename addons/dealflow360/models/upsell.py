@@ -53,6 +53,25 @@ class DealflowUpsellRule(models.Model):
 class SaleOrderUpsell(models.Model):
     _inherit = "sale.order"
 
+    df_dismissed_upsell_product_ids = fields.Many2many(
+        "product.product",
+        "dealflow_order_dismissed_upsell_rel",
+        "order_id",
+        "product_id",
+        string="Dismissed Suggestions",
+        copy=False,
+        help="Suggestions the rep has waved away on this quotation. B5 lists "
+        "Dismiss beside Add to Quote; storing it here means a dismissal "
+        "survives a page reload instead of reappearing on the next render.",
+    )
+
+    def action_dismiss_upsell(self, product_id):
+        """B5's Dismiss. Never deletes the dealflow.upsell.rule - the pairing
+        stays valid for every other deal, it is just not wanted on this one."""
+        self.ensure_one()
+        self.df_dismissed_upsell_product_ids = [(4, product_id)]
+        return True
+
     def _df_upsell_reference_price(self, product):
         """Same pricelist-aware reference price used by DEC-009's governance
         compute (sale_order_line._df_reference_price) - never the raw
@@ -91,9 +110,10 @@ class SaleOrderUpsell(models.Model):
             return []
 
         candidates = {}
+        dismissed_ids = set(self.df_dismissed_upsell_product_ids.ids)
 
         def _bump(product, score, reason):
-            if product.id in cart_products.ids:
+            if product.id in cart_products.ids or product.id in dismissed_ids:
                 return
             bucket = candidates.setdefault(
                 product.id, {"product": product, "score": 0.0, "reasons": []}

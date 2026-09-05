@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- The Configuration area the problem statement's section A asks for.
+         Three models the engines read on every quotation had no screen at all,
+         so the settings they depend on could only be set from a shell:
+           A5  dealflow.recurring.plan   - intervals, proration, cancel rules
+           A6  dealflow.upsell.rule      - the curated pairings
+           A4  stock.warehouse.df_shipping_cost_weight - the tie-break the
+               allocation engine minimises shipments against
+         A2's price lists are Odoo's own model, so that menu just points at the
+         native action rather than rebuilding it. -->
+
+    <!-- A5: recurring plans -->
+    <record id="view_dealflow_recurring_plan_tree" model="ir.ui.view">
+        <field name="name">dealflow.recurring.plan.tree</field>
+        <field name="model">dealflow.recurring.plan</field>
+        <field name="arch" type="xml">
+            <tree string="Recurring Plans" editable="bottom">
+                <field name="name"/>
+                <field name="interval"/>
+                <field name="proration"/>
+                <field name="cancel_rule"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_dealflow_recurring_plan_form" model="ir.ui.view">
+        <field name="name">dealflow.recurring.plan.form</field>
+        <field name="model">dealflow.recurring.plan</field>
+        <field name="arch" type="xml">
+            <form string="Recurring Plan">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. Standard Monthly"/></h1>
+                    </div>
+                    <group>
+                        <group string="Billing">
+                            <field name="interval"/>
+                            <field name="active"/>
+                        </group>
+                        <group string="Changes and cancellation">
+                            <field name="proration"/>
+                            <field name="cancel_rule"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_dealflow_recurring_plan" model="ir.actions.act_window">
+        <field name="name">Recurring Plans</field>
+        <field name="res_model">dealflow.recurring.plan</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Define your first recurring plan.</p>
+            <p>A plan sets how often a subscription bills, whether a mid-cycle
+               quantity change is prorated, and what happens to the current period
+               when a customer cancels. Attach one to a product on its DealFlow360
+               tab.</p>
+        </field>
+    </record>
+
+    <!-- A6: upsell rules -->
+    <record id="view_dealflow_upsell_rule_tree" model="ir.ui.view">
+        <field name="name">dealflow.upsell.rule.tree</field>
+        <field name="model">dealflow.upsell.rule</field>
+        <field name="arch" type="xml">
+            <tree string="Upsell Rules" editable="bottom">
+                <field name="product_id" string="When the quote contains"/>
+                <field name="suggested_product_id" string="Suggest"/>
+                <field name="reason"/>
+                <field name="score"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_dealflow_upsell_rule" model="ir.actions.act_window">
+        <field name="name">Upsell Rules</field>
+        <field name="res_model">dealflow.upsell.rule</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No pairings yet.</p>
+            <p>A rule says "when this product is on the quotation, suggest that
+               one". Suggestions are also ranked by real co-purchase history and
+               a promotion bonus, and anything below its product's minimum margin
+               is dropped, so this list is a starting point rather than the whole
+               ranking.</p>
+        </field>
+    </record>
+
+    <!-- A4: warehouse shipping cost weighting -->
+    <record id="view_warehouse_form_dealflow" model="ir.ui.view">
+        <field name="name">stock.warehouse.form.dealflow</field>
+        <field name="model">stock.warehouse</field>
+        <field name="inherit_id" ref="stock.view_warehouse"/>
+        <field name="arch" type="xml">
+            <field name="code" position="after">
+                <field name="df_shipping_cost_weight"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="action_dealflow_warehouses" model="ir.actions.act_window">
+        <field name="name">Warehouses</field>
+        <field name="res_model">stock.warehouse</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Menus -->
+    <menuitem id="menu_dealflow_recurring_plans" name="Recurring Plans"
+              parent="menu_dealflow_configuration"
+              action="action_dealflow_recurring_plan" sequence="30"
+              groups="group_dealflow_admin"/>
+    <menuitem id="menu_dealflow_upsell_rules" name="Upsell Rules"
+              parent="menu_dealflow_configuration"
+              action="action_dealflow_upsell_rule" sequence="40"
+              groups="group_dealflow_admin"/>
+    <menuitem id="menu_dealflow_warehouses" name="Warehouses"
+              parent="menu_dealflow_configuration"
+              action="action_dealflow_warehouses" sequence="50"
+              groups="group_dealflow_admin"/>
+    <menuitem id="menu_dealflow_pricelists" name="Price Lists"
+              parent="menu_dealflow_configuration"
+              action="product.product_pricelist_action2" sequence="60"
+              groups="group_dealflow_admin"/>
+</odoo>
