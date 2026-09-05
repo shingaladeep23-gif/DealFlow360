@@ -76,6 +76,19 @@ built — see the open question on the task board.
 
 ## Recreating these accounts
 
-Password for every seeded account is `dealflow360`. They live only in the
-`dealflow360` database (created via the ORM, not in module data), so a database
-rebuild loses them.
+Password for every seeded account is `dealflow360`.
+
+These accounts are **seeded in code** (`addons/dealflow360/demo/demo_runtime.py`)
+and are recreated automatically:
+
+- on a fresh install, by `post_init_hook`
+- on an upgrade of an existing database, by the `17.0.1.2.0` migration
+
+The seed is idempotent, so re-running it is a no-op. The same file also creates
+the worked demo quotations the flows below use.
+
+This was previously not the case: the accounts had been created by hand through
+the ORM in throwaway sessions and were documented as living "only in the
+dealflow360 database". A database rebuild duly lost all of them along with every
+demo quotation, which is why the product appeared to have no working features
+when opened through the UI. Anything the demo depends on now lives in code.

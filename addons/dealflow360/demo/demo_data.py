@@ -7,6 +7,9 @@ fulfillment and billing engines will read — never hardcoded results.
 """
 
 
+from .demo_runtime import seed_runtime_demo
+
+
 def _create_partners(env, tiers):
     Partner = env["res.partner"]
     acme = Partner.create(
@@ -180,3 +183,6 @@ def post_init_hook(env):
     _create_upsell_rules(env, products)
     warehouses = _create_warehouses(env)
     _seed_stock(env, products, warehouses)
+    # Role logins and worked demo deals - see demo/demo_runtime.py for why
+    # these are code and not hand-made records.
+    seed_runtime_demo(env)
