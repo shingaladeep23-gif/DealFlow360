@@ -81,6 +81,9 @@ class DealflowApproval(models.Model):
                             "role": role,
                             "sequence": (index + 1) * 10,
                             "state": "pending" if index == 0 else "waiting",
+                            "pending_since": (
+                                fields.Datetime.now() if index == 0 else False
+                            ),
                         },
                     )
                     for index, role in enumerate(roles)
@@ -105,7 +108,7 @@ class DealflowApproval(models.Model):
         self.ensure_one()
         remaining = self.step_ids.filtered(lambda s: s.state == "waiting").sorted("sequence")
         if remaining:
-            remaining[0].state = "pending"
+            remaining[0].write({"state": "pending", "pending_since": fields.Datetime.now()})
         else:
             self.state = "approved"
 
@@ -149,6 +152,15 @@ class DealflowApprovalStep(models.Model):
     )
     reason = fields.Text(string="Reason")
     acted_on = fields.Datetime(string="Acted On", readonly=True)
+    pending_since = fields.Datetime(
+        string="Pending Since",
+        readonly=True,
+        help="When this step's state last became 'pending' (i.e. became "
+        "actionable). DF-017's approval-delay signal reads this - never "
+        "create_date, which for a HIGH-risk chain's finance step is set "
+        "when the chain was created, not when the manager's approval "
+        "actually made finance's step actionable.",
+    )
 
     def _role_label(self):
         return dict(self._fields["role"].selection)[self.role]

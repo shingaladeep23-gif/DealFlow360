@@ -33,3 +33,5 @@ access_dealflow_billing_schedule_finance,dealflow.billing.schedule.finance,model
 access_dealflow_billing_schedule_admin,dealflow.billing.schedule.admin,model_dealflow_billing_schedule,group_dealflow_admin,1,1,1,1
 access_dealflow_upsell_rule_rep,dealflow.upsell.rule.rep,model_dealflow_upsell_rule,group_dealflow_sales_rep,1,0,0,0
 access_dealflow_upsell_rule_admin,dealflow.upsell.rule.admin,model_dealflow_upsell_rule,group_dealflow_admin,1,1,1,1
+access_dealflow_health_flag_rep,dealflow.health.flag.rep,model_dealflow_health_flag,group_dealflow_sales_rep,1,0,0,0
+access_dealflow_health_flag_admin,dealflow.health.flag.admin,model_dealflow_health_flag,group_dealflow_admin,1,1,1,1

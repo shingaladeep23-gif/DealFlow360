@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="health_flag_stalled" model="dealflow.health.flag">
+            <field name="name">Stalled</field>
+            <field name="code">stalled</field>
+        </record>
+        <record id="health_flag_discount_anomaly" model="dealflow.health.flag">
+            <field name="name">Discount Anomaly</field>
+            <field name="code">discount_anomaly</field>
+        </record>
+        <record id="health_flag_approval_delay" model="dealflow.health.flag">
+            <field name="name">Approval Delay</field>
+            <field name="code">approval_delay</field>
+        </record>
+        <record id="health_flag_delivery_risk" model="dealflow.health.flag">
+            <field name="name">Delivery Risk</field>
+            <field name="code">delivery_risk</field>
+        </record>
+    </data>
+</odoo>
