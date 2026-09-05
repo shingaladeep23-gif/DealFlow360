@@ -1,0 +1,471 @@
+"""Multi-warehouse fulfillment (DF-010).
+
+DEC-006: the allocation engine reads live stock.quant per warehouse, then
+greedily prefers whichever warehouse can COMPLETELY fulfil the greatest
+number of still-unallocated order lines (minimizing shipment count), tied
+off by stock.warehouse.df_shipping_cost_weight. Whatever cannot be sourced
+from any single warehouse is split across the warehouses with remaining
+free stock; anything still short becomes a backorder line. Manual override
+is honoured: action_confirm() never recomputes the plan, it only ever
+materializes whatever is currently on line_ids.
+"""
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
+
+
+class StockWarehouseShippingCost(models.Model):
+    _inherit = "stock.warehouse"
+
+    df_shipping_cost_weight = fields.Float(
+        string="Shipping Cost Weight",
+        default=1.0,
+        help="Relative per-shipment shipping cost. Not a monetary figure - a "
+        "dimensionless weight (e.g. a remote depot might carry 1.5 against "
+        "the main warehouse's 1.0). Used only as a DEC-006 tie-break when "
+        "two or more warehouses could source an equal number of order "
+        "lines; the allocation engine prefers the lower weight.",
+    )
+
+
+class StockPickingSplit(models.Model):
+    _inherit = "stock.picking"
+
+    df_split_id = fields.Many2one(
+        "dealflow.warehouse.split",
+        string="Fulfillment Split",
+        index=True,
+        help="The DF-010 allocation plan this delivery was generated from.",
+    )
+
+
+class SaleOrderSplit(models.Model):
+    _inherit = "sale.order"
+
+    df_split_ids = fields.One2many(
+        "dealflow.warehouse.split", "order_id", string="Fulfillment Splits"
+    )
+
+    def action_confirm(self):
+        res = super().action_confirm()
+        for order in self:
+            if order.df_split_ids:
+                continue
+            fulfillable = order.order_line.filtered(
+                lambda l: not l.display_type
+                and l.product_id
+                and l.product_id.type == "product"
+            )
+            if not fulfillable:
+                continue
+            # sale_stock's own action_confirm (called by super() above) just
+            # launched its native single-warehouse procurement route
+            # (order_line._action_launch_stock_rule(), reserving stock
+            # against order.warehouse_id alone). DEC-006 requires OUR
+            # allocation engine to decide sourcing across every warehouse
+            # instead, so cancel that auto-generated delivery before it can
+            # hold stock reserved - otherwise the split engine would see
+            # less free quantity than genuinely exists, and the order would
+            # end up with two independent, uncoordinated sets of deliveries.
+            stray_pickings = order.picking_ids.filtered(
+                lambda p: p.state not in ("done", "cancel")
+            )
+            stray_pickings.action_cancel()
+            split = self.env["dealflow.warehouse.split"].create(
+                {"order_id": order.id}
+            )
+            split.action_generate_split()
+        return res
+
+
+class DealflowWarehouseSplit(models.Model):
+    _name = "dealflow.warehouse.split"
+    _description = "Multi-warehouse fulfillment allocation for a quotation (DF-010)"
+    _order = "create_date desc"
+
+    order_id = fields.Many2one(
+        "sale.order",
+        string="Quotation",
+        required=True,
+        ondelete="cascade",
+        index=True,
+    )
+    partner_id = fields.Many2one(
+        related="order_id.partner_id", string="Customer", store=True
+    )
+    state = fields.Selection(
+        [("draft", "Proposed"), ("confirmed", "Confirmed")],
+        string="Status",
+        required=True,
+        default="draft",
+    )
+    line_ids = fields.One2many(
+        "dealflow.warehouse.split.line", "split_id", string="Allocation Lines"
+    )
+    picking_ids = fields.One2many(
+        "stock.picking", "df_split_id", string="Deliveries"
+    )
+    shipment_count = fields.Integer(
+        string="Estimated Shipments",
+        compute="_compute_shipment_count",
+        store=True,
+        help="DEC-006's minimization objective: the count of distinct "
+        "warehouses actually sourcing this order (excludes backorder rows, "
+        "which have no warehouse yet).",
+    )
+    has_backorder = fields.Boolean(
+        string="Has Backorder", compute="_compute_shipment_count", store=True
+    )
+
+    @api.depends("line_ids.warehouse_id", "line_ids.qty", "line_ids.is_backorder")
+    def _compute_shipment_count(self):
+        for split in self:
+            fulfilled = split.line_ids.filtered(
+                lambda l: not l.is_backorder and l.qty > 1e-6
+            )
+            split.shipment_count = len(fulfilled.mapped("warehouse_id"))
+            split.has_backorder = bool(
+                split.line_ids.filtered(lambda l: l.is_backorder and l.qty > 1e-6)
+            )
+
+    def _fulfillable_lines(self):
+        self.ensure_one()
+        return self.order_id.order_line.filtered(
+            lambda l: not l.display_type
+            and l.product_id
+            and l.product_id.type == "product"
+        )
+
+    def _free_qty_map(self, warehouses, products):
+        """{(warehouse_id, product_id): on-hand minus reserved} from real
+        stock.quant - never a hardcoded availability figure."""
+        free = {}
+        if not warehouses or not products:
+            return free
+        quants = (
+            self.env["stock.quant"]
+            .sudo()
+            .search(
+                [
+                    ("warehouse_id", "in", warehouses.ids),
+                    ("product_id", "in", products.ids),
+                    ("location_id.usage", "=", "internal"),
+                ]
+            )
+        )
+        for quant in quants:
+            key = (quant.warehouse_id.id, quant.product_id.id)
+            free[key] = free.get(key, 0.0) + quant.quantity - quant.reserved_quantity
+        return free
+
+    def _compute_allocation_plan(self):
+        """Pure function (no writes): returns a list of
+        (order_line, warehouse_or_False, qty, is_backorder) tuples."""
+        self.ensure_one()
+        lines = self._fulfillable_lines()
+        if not lines:
+            return []
+
+        warehouses = self.env["stock.warehouse"].search(
+            [("company_id", "=", self.order_id.company_id.id)]
+        )
+        products = lines.mapped("product_id")
+        free = self._free_qty_map(warehouses, products)
+
+        line_by_id = {line.id: line for line in lines}
+        remaining = {line.id: line.product_uom_qty for line in lines}
+        plan = []
+
+        # Phase 1 - greedily pick the warehouse that fully covers the most
+        # still-open lines; tie-break by lowest shipping cost weight, then a
+        # stable id so the result is deterministic.
+        pending_ids = [lid for lid, qty in remaining.items() if qty > 1e-6]
+        while pending_ids:
+            best_wh = None
+            best_cover = []
+            for wh in warehouses:
+                cover = [
+                    lid
+                    for lid in pending_ids
+                    if free.get((wh.id, line_by_id[lid].product_id.id), 0.0)
+                    >= remaining[lid]
+                    - 1e-6
+                ]
+                if not cover:
+                    continue
+                if best_wh is None or len(cover) > len(best_cover) or (
+                    len(cover) == len(best_cover)
+                    and (wh.df_shipping_cost_weight, wh.id)
+                    < (best_wh.df_shipping_cost_weight, best_wh.id)
+                ):
+                    best_wh, best_cover = wh, cover
+            if not best_wh:
+                break
+            for lid in best_cover:
+                line = line_by_id[lid]
+                qty = remaining[lid]
+                plan.append((line, best_wh, qty, False))
+                free[(best_wh.id, line.product_id.id)] = (
+                    free.get((best_wh.id, line.product_id.id), 0.0) - qty
+                )
+                remaining[lid] = 0.0
+            pending_ids = [lid for lid in pending_ids if remaining[lid] > 1e-6]
+
+        # Phase 2 - no single warehouse can fully cover any remaining line.
+        # Take whatever partial stock is available, preferring the
+        # warehouse holding the most of that product (same tie-break),
+        # then backorder whatever is still short.
+        for lid in pending_ids:
+            line = line_by_id[lid]
+            need = remaining[lid]
+            candidates = sorted(
+                (
+                    wh
+                    for wh in warehouses
+                    if free.get((wh.id, line.product_id.id), 0.0) > 1e-6
+                ),
+                key=lambda wh: (
+                    -free.get((wh.id, line.product_id.id), 0.0),
+                    wh.df_shipping_cost_weight,
+                    wh.id,
+                ),
+            )
+            for wh in candidates:
+                if need <= 1e-6:
+                    break
+                available = free.get((wh.id, line.product_id.id), 0.0)
+                take = min(need, available)
+                if take <= 1e-6:
+                    continue
+                plan.append((line, wh, take, False))
+                free[(wh.id, line.product_id.id)] = available - take
+                need -= take
+            if need > 1e-6:
+                plan.append((line, False, need, True))
+
+        return plan
+
+    def _apply_allocation_plan(self, plan):
+        self.ensure_one()
+        self.line_ids.unlink()
+        Line = self.env["dealflow.warehouse.split.line"]
+        for order_line, warehouse, qty, is_backorder in plan:
+            Line.create(
+                {
+                    "split_id": self.id,
+                    "order_line_id": order_line.id,
+                    "warehouse_id": warehouse.id if warehouse else False,
+                    "qty": qty,
+                    "is_backorder": is_backorder,
+                }
+            )
+
+    def action_generate_split(self):
+        """(Re)propose an allocation from current live stock. Discards any
+        existing lines on this split (including a prior manual override) -
+        only call this to (re)generate the system suggestion, never as part
+        of confirming a user's edited plan."""
+        for split in self:
+            if split.state == "confirmed":
+                raise UserError(
+                    _(
+                        "This split is already confirmed. Create a new split "
+                        "to reallocate the remaining backorder instead."
+                    )
+                )
+            split._apply_allocation_plan(split._compute_allocation_plan())
+        return True
+
+    def _create_pickings_for_lines(self, lines):
+        """Materialize one stock.picking per distinct warehouse among the
+        given (non-backorder) split lines, with one stock.move per line."""
+        pickings = self.env["stock.picking"]
+        fulfillable = lines.filtered(lambda l: not l.is_backorder and l.qty > 1e-6)
+        for warehouse in fulfillable.mapped("warehouse_id"):
+            wh_lines = fulfillable.filtered(lambda l: l.warehouse_id == warehouse)
+            picking_type = warehouse.out_type_id
+            if not picking_type:
+                raise UserError(
+                    _("Warehouse %s has no outgoing operation type configured.")
+                    % warehouse.name
+                )
+            src = picking_type.default_location_src_id or warehouse.lot_stock_id
+            dest = (
+                picking_type.default_location_dest_id
+                or self.order_id.partner_id.property_stock_customer
+            )
+            picking = self.env["stock.picking"].create(
+                {
+                    "picking_type_id": picking_type.id,
+                    "location_id": src.id,
+                    "location_dest_id": dest.id,
+                    "partner_id": (
+                        self.order_id.partner_shipping_id.id
+                        or self.order_id.partner_id.id
+                    ),
+                    "origin": self.order_id.name,
+                    "df_split_id": self.id,
+                    "move_ids": [
+                        (
+                            0,
+                            0,
+                            {
+                                "name": line.order_line_id.product_id.display_name,
+                                "product_id": line.order_line_id.product_id.id,
+                                "product_uom_qty": line.qty,
+                                "product_uom": line.order_line_id.product_uom.id,
+                                "location_id": src.id,
+                                "location_dest_id": dest.id,
+                                "sale_line_id": line.order_line_id.id,
+                            },
+                        )
+                        for line in wh_lines
+                    ],
+                }
+            )
+            picking.action_assign()
+            pickings |= picking
+        return pickings
+
+    def action_confirm(self):
+        """Materialize whatever is currently on line_ids - respects a
+        manual override, never recomputes the suggestion (DEC-006 / AT-06)."""
+        for split in self:
+            if split.state == "confirmed":
+                continue
+            if not split.line_ids:
+                raise UserError(
+                    _("Generate or enter an allocation before confirming.")
+                )
+            split._create_pickings_for_lines(split.line_ids)
+            split.state = "confirmed"
+            split.order_id.message_post(
+                body=_(
+                    "Fulfillment split confirmed: %(n)d shipment(s) created%(bo)s."
+                )
+                % {
+                    "n": split.shipment_count,
+                    "bo": _(
+                        ", with a backorder for the unavailable quantity"
+                    )
+                    if split.has_backorder
+                    else "",
+                }
+            )
+        return True
+
+    def action_consolidate_backorder(self):
+        """Re-check current stock against this split's outstanding backorder
+        and, wherever now sourceable (even partially) from arrived stock,
+        add allocation lines and create the additional delivery. Never
+        touches quantity already shipped."""
+        for split in self:
+            backorder_lines = split.line_ids.filtered(
+                lambda l: l.is_backorder and l.qty > 1e-6
+            )
+            if not backorder_lines:
+                raise UserError(_("This split has no outstanding backorder."))
+
+            warehouses = self.env["stock.warehouse"].search(
+                [("company_id", "=", split.order_id.company_id.id)]
+            )
+            products = backorder_lines.mapped("order_line_id.product_id")
+            free = split._free_qty_map(warehouses, products)
+
+            Line = self.env["dealflow.warehouse.split.line"]
+            new_lines = Line
+            total_consolidated = 0.0
+            for bo_line in backorder_lines:
+                order_line = bo_line.order_line_id
+                need = bo_line.qty
+                candidates = sorted(
+                    (
+                        wh
+                        for wh in warehouses
+                        if free.get((wh.id, order_line.product_id.id), 0.0) > 1e-6
+                    ),
+                    key=lambda wh: (
+                        -free.get((wh.id, order_line.product_id.id), 0.0),
+                        wh.df_shipping_cost_weight,
+                        wh.id,
+                    ),
+                )
+                for wh in candidates:
+                    if need <= 1e-6:
+                        break
+                    available = free.get((wh.id, order_line.product_id.id), 0.0)
+                    take = min(need, available)
+                    if take <= 1e-6:
+                        continue
+                    new_lines |= Line.create(
+                        {
+                            "split_id": split.id,
+                            "order_line_id": order_line.id,
+                            "warehouse_id": wh.id,
+                            "qty": take,
+                            "is_backorder": False,
+                        }
+                    )
+                    free[(wh.id, order_line.product_id.id)] = available - take
+                    need -= take
+                    total_consolidated += take
+                bo_line.qty = need
+
+            if not new_lines:
+                raise UserError(
+                    _(
+                        "None of the backordered quantity can be sourced from "
+                        "current stock yet."
+                    )
+                )
+            split.line_ids.filtered(
+                lambda l: l.is_backorder and l.qty <= 1e-6
+            ).unlink()
+            split._create_pickings_for_lines(new_lines)
+            split.order_id.message_post(
+                body=_(
+                    "Backorder consolidated: %.2f unit(s) now sourced from "
+                    "arrived stock."
+                )
+                % total_consolidated
+            )
+        return True
+
+
+class DealflowWarehouseSplitLine(models.Model):
+    _name = "dealflow.warehouse.split.line"
+    _description = "Per-warehouse allocation of one order line (DF-010)"
+
+    split_id = fields.Many2one(
+        "dealflow.warehouse.split",
+        required=True,
+        ondelete="cascade",
+        index=True,
+    )
+    order_id = fields.Many2one(
+        related="split_id.order_id", string="Quotation", store=True
+    )
+    order_line_id = fields.Many2one(
+        "sale.order.line", string="Order Line", required=True, ondelete="cascade"
+    )
+    product_id = fields.Many2one(
+        related="order_line_id.product_id", string="Product", store=True
+    )
+    warehouse_id = fields.Many2one("stock.warehouse", string="Warehouse")
+    qty = fields.Float(string="Quantity", required=True)
+    is_backorder = fields.Boolean(string="Backorder", default=False)
+    df_estimated_cost = fields.Float(
+        string="Est. Shipping Cost",
+        compute="_compute_df_estimated_cost",
+        store=True,
+        help="DEC-006's shipping cost weight, shown once per row for "
+        "inspectability - not a monetary total, a relative tie-break proxy.",
+    )
+
+    @api.depends("warehouse_id.df_shipping_cost_weight", "is_backorder")
+    def _compute_df_estimated_cost(self):
+        for line in self:
+            line.df_estimated_cost = (
+                0.0
+                if line.is_backorder or not line.warehouse_id
+                else line.warehouse_id.df_shipping_cost_weight
+            )

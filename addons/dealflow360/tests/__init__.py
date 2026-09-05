@@ -6,3 +6,5 @@ from . import test_negotiation
 from . import test_portal_status
 from . import test_portal_http
 from . import test_approval
+from . import test_warehouse_split
+from . import test_recurring_billing
