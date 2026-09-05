@@ -1,0 +1,28 @@
+# --- Agent/hive infrastructure: NEVER commit ---
+hive/
+palace/
+roster.json
+roster-backups/
+hallways.json
+.claude/
+
+# --- Odoo runtime ---
+odoo-data/
+postgres-data/
+*.log
+filestore/
+sessions/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
