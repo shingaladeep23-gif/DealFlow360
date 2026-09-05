@@ -118,6 +118,11 @@ class DealflowPortal(CustomerPortal):
         the yes/no fact that a chain is outstanding - never the role, step
         or score behind it (AT-08 forbids exposing approval-chain internals
         to the customer)."""
+        if request.env["dealflow.negotiation"].sudo()._open_for_order(order):
+            # The customer has asked for a change and nobody has answered yet.
+            # Letting them confirm now would mean confirming terms they have
+            # themselves said they do not accept.
+            return True
         approval = order.df_approval_id
         return bool(approval) and approval.state != "approved"
 
@@ -181,16 +186,42 @@ class DealflowPortal(CustomerPortal):
             return request.redirect(f"/my/quotation/{order_sudo.id}")
         if not 0 <= pct <= 100:
             return request.redirect(f"/my/quotation/{order_sudo.id}")
-        negotiation = request.env["dealflow.negotiation"].sudo().create(
+        Negotiation = request.env["dealflow.negotiation"].sudo()
+        if Negotiation._open_for_order(order_sudo):
+            # One outstanding request at a time - otherwise a customer can
+            # queue up proposals faster than a rep can answer them.
+            return request.redirect(f"/my/quotation/{order_sudo.id}")
+        # RECORDED, not applied. This used to call negotiation._apply() inline,
+        # which rewrote the order's prices on the spot with nobody in the loop:
+        # a portal user could give themselves any discount inside their tier
+        # ceiling and then confirm their own order. Acceptance is a sales-side
+        # decision now (dealflow.negotiation.action_accept, reachable from the
+        # internal Negotiations screen).
+        Negotiation.create(
             {"order_id": order_sudo.id, "counter_discount": pct}
         )
-        negotiation._apply()
+        order_sudo.message_post(
+            body=_(
+                "Customer requested a %.2f%% discount through the portal."
+            )
+            % pct,
+            message_type="comment",
+            subtype_xmlid="mail.mt_comment",
+        )
         return request.redirect(f"/my/quotation/{order_sudo.id}")
 
     @http.route(["/my/quotation/<int:order_id>/confirm"], type="http", auth="user", methods=["POST"], website=True)
     def dealflow_portal_quotation_confirm(self, order_id, access_token=None, **post):
         order_sudo = self._dealflow_document_check_access(order_id, access_token)
         if order_sudo.state not in ("draft", "sent"):
+            return request.redirect(f"/my/quotation/{order_sudo.id}")
+        if request.env["dealflow.negotiation"].sudo()._open_for_order(order_sudo):
+            # Server-side, not just the disabled button. _dealflow_confirm_blocked
+            # only controls how the form RENDERS; a POST straight to this route
+            # ignores it entirely, so without this check a customer with an
+            # unanswered request could still confirm the terms they had just
+            # disputed. Caught by
+            # test_customer_cannot_confirm_while_their_request_is_unanswered.
             return request.redirect(f"/my/quotation/{order_sudo.id}")
         # DF-015: sale.order.action_confirm (models/sale_order.py) is now the
         # single source of truth for whether a flagged order may confirm -

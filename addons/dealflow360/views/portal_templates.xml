@@ -49,6 +49,7 @@
             .o_df_portal_timeline_body { flex: 1; }
             .o_df_portal_timeline_state { display: inline-block; margin-left: 8px; font-size: 0.85rem; color: #6c757d; }
             .o_df_portal_timeline_date { font-size: 0.8rem; color: #adb5bd; }
+            .o_df_portal_timeline_reason { margin-top: 4px; font-size: 0.9rem; color: #495057; background-color: #f8f9fa; border-radius: 6px; padding: 6px 10px; }
             .o_df_portal_thread { list-style: none; padding: 0; margin: 0 0 16px; }
             .o_df_portal_thread_item { padding: 10px 12px; border-radius: 8px; background-color: #f8f9fa; margin-bottom: 8px; }
             .o_df_portal_thread_meta { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; }
@@ -213,6 +214,9 @@
                                 <div class="o_df_portal_timeline_date">
                                     <span t-field="neg.create_date" t-options="{'widget': 'date'}"/>
                                 </div>
+                                <div t-if="neg.response_reason" class="o_df_portal_timeline_reason">
+                                    <t t-esc="neg.response_reason"/>
+                                </div>
                             </div>
                         </li>
                     </ul>
@@ -231,7 +235,7 @@
                                     <span t-field="msg.date" t-options="{'widget': 'date'}"/>
                                 </span>
                             </div>
-                            <div class="o_df_portal_thread_body" t-raw="msg.body"/>
+                            <div class="o_df_portal_thread_body" t-out="msg.body"/>
                         </li>
                     </ul>
 

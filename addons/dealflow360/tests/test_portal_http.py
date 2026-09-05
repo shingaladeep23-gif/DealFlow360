@@ -150,7 +150,33 @@ class TestPortalHttp(HttpCase):
         )
         self.assertEqual(before, after, "a cancelled quotation must reject a counter-discount")
 
-    def test_own_counter_discount_actually_applies(self):
+    def test_own_counter_discount_is_recorded_but_not_applied(self):
+        """A counter-discount is a REQUEST. This test used to assert the
+        opposite - that posting the form moved the discount to 5% - which is
+        exactly the bug: a portal user could price their own order and then
+        confirm it. Submitting now records a proposal and changes nothing
+        until someone on the sales side accepts it."""
+        self.authenticate("acme_http_test@example.com", "AcmeHttp123!")
+        detail = self.url_open(f"/my/quotation/{self.acme_order.id}")
+        token = self._csrf_token(detail.text)
+        before = self.acme_order.amount_total
+        self.url_open(
+            f"/my/quotation/{self.acme_order.id}/counter",
+            data={"csrf_token": token, "counter_discount": "5"},
+        )
+        self.acme_line.invalidate_recordset(["discount"])
+        self.acme_order.invalidate_recordset(["amount_total"])
+        self.assertEqual(self.acme_line.discount, 0.0, "no price may change")
+        self.assertEqual(self.acme_order.amount_total, before)
+
+        negotiation = self.env["dealflow.negotiation"].search(
+            [("order_id", "=", self.acme_order.id)]
+        )
+        self.assertEqual(len(negotiation), 1)
+        self.assertEqual(negotiation.state, "proposed")
+        self.assertEqual(negotiation.counter_discount, 5.0)
+
+    def test_customer_cannot_confirm_while_their_request_is_unanswered(self):
         self.authenticate("acme_http_test@example.com", "AcmeHttp123!")
         detail = self.url_open(f"/my/quotation/{self.acme_order.id}")
         token = self._csrf_token(detail.text)
@@ -158,5 +184,29 @@ class TestPortalHttp(HttpCase):
             f"/my/quotation/{self.acme_order.id}/counter",
             data={"csrf_token": token, "counter_discount": "5"},
         )
-        self.acme_line.invalidate_recordset(["discount"])
-        self.assertEqual(self.acme_line.discount, 5.0)
+        self.url_open(
+            f"/my/quotation/{self.acme_order.id}/confirm",
+            data={"csrf_token": token},
+        )
+        self.acme_order.invalidate_recordset(["state"])
+        self.assertNotEqual(
+            self.acme_order.state,
+            "sale",
+            "confirming terms the customer has themselves disputed",
+        )
+
+    def test_only_one_open_request_at_a_time(self):
+        self.authenticate("acme_http_test@example.com", "AcmeHttp123!")
+        detail = self.url_open(f"/my/quotation/{self.acme_order.id}")
+        token = self._csrf_token(detail.text)
+        for pct in ("5", "9", "12"):
+            self.url_open(
+                f"/my/quotation/{self.acme_order.id}/counter",
+                data={"csrf_token": token, "counter_discount": pct},
+            )
+        negotiations = self.env["dealflow.negotiation"].search(
+            [("order_id", "=", self.acme_order.id)]
+        )
+        self.assertEqual(
+            len(negotiations), 1, "a customer cannot outrun the rep answering"
+        )

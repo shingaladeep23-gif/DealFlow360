@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- The screen the problem statement's §3 rep role needs: "Responds to
+         customer negotiation requests". There was none. dealflow.negotiation
+         had ACLs and a portal timeline but no internal view, no action and no
+         menu, and the counter-discount applied itself the moment the customer
+         pressed Submit - so there was nothing for a rep to respond TO, and no
+         way to do it. -->
+
+    <record id="view_dealflow_negotiation_tree" model="ir.ui.view">
+        <field name="name">dealflow.negotiation.tree</field>
+        <field name="model">dealflow.negotiation</field>
+        <field name="arch" type="xml">
+            <tree string="Negotiation Requests" create="false"
+                  decoration-warning="state == 'proposed'"
+                  decoration-muted="state == 'rejected'">
+                <field name="create_date" string="Requested"/>
+                <field name="order_id"/>
+                <field name="partner_id"/>
+                <field name="counter_discount" string="Asking for (%)"/>
+                <field name="amount_before" widget="monetary" string="Order total"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="applied_by_id" string="Answered by" optional="show"/>
+                <field name="responded_on" string="Answered" optional="hide"/>
+                <field name="state" widget="badge"
+                       decoration-warning="state == 'proposed'"
+                       decoration-success="state == 'applied'"
+                       decoration-info="state == 'requires_reapproval'"
+                       decoration-danger="state == 'rejected'"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_dealflow_negotiation_form" model="ir.ui.view">
+        <field name="name">dealflow.negotiation.form</field>
+        <field name="model">dealflow.negotiation</field>
+        <field name="arch" type="xml">
+            <form string="Negotiation Request" create="false">
+                <header>
+                    <button name="action_accept" type="object" string="Accept discount"
+                            class="btn-primary" invisible="state != 'proposed'"
+                            confirm="Apply this discount to the quotation? If it goes past the customer's limit it will be sent for approval automatically."/>
+                    <button name="action_reject" type="object" string="Decline"
+                            invisible="state != 'proposed'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="proposed,applied"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="counter_discount" string="Customer is asking for"/>
+                        <h1>
+                            <field name="counter_discount" readonly="1"
+                                   class="oe_inline"/><span class="oe_inline">%</span>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Deal">
+                            <field name="order_id" readonly="1"/>
+                            <field name="partner_id" readonly="1"/>
+                            <field name="amount_before" widget="monetary" readonly="1"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                        <group string="Effect on governance">
+                            <field name="risk_level_before" readonly="1"
+                                   invisible="state == 'proposed'"/>
+                            <field name="risk_level_after" readonly="1"
+                                   invisible="state == 'proposed'"/>
+                            <field name="applied_by_id" readonly="1"
+                                   invisible="state == 'proposed'"/>
+                            <field name="responded_on" readonly="1"
+                                   invisible="state == 'proposed'"/>
+                        </group>
+                    </group>
+                    <div class="o_df_screen_hint" invisible="state != 'proposed'">
+                        Accepting applies this discount to every line that is not
+                        already discounted at least this deeply - it never reduces a
+                        discount you have already given. The risk engine then decides
+                        for itself whether the result needs approving again.
+                    </div>
+                    <group string="Your response">
+                        <field name="response_reason" nolabel="1"
+                               readonly="state != 'proposed'"
+                               placeholder="Required if you decline - the customer sees this."/>
+                    </group>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_dealflow_negotiation_search" model="ir.ui.view">
+        <field name="name">dealflow.negotiation.search</field>
+        <field name="model">dealflow.negotiation</field>
+        <field name="arch" type="xml">
+            <search string="Negotiation Requests">
+                <field name="order_id"/>
+                <field name="partner_id"/>
+                <filter name="proposed" string="Needs a response"
+                        domain="[('state', '=', 'proposed')]"/>
+                <filter name="accepted" string="Accepted"
+                        domain="[('state', 'in', ('applied', 'requires_reapproval'))]"/>
+                <filter name="rejected" string="Declined"
+                        domain="[('state', '=', 'rejected')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_state" string="Status"
+                            context="{'group_by': 'state'}"/>
+                    <filter name="group_partner" string="Customer"
+                            context="{'group_by': 'partner_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_dealflow_negotiations" model="ir.actions.act_window">
+        <field name="name">Negotiations</field>
+        <field name="res_model">dealflow.negotiation</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_dealflow_negotiation_search"/>
+        <field name="context">{'search_default_proposed': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">No open requests.</p>
+            <p>When a customer asks for a different discount from the portal, the
+               request lands here for you to accept or decline. Nothing on the
+               quotation changes until you answer.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_dealflow_negotiations" name="Negotiations"
+              parent="menu_dealflow_root"
+              action="action_dealflow_negotiations" sequence="35"
+              groups="group_dealflow_sales_rep"/>
+</odoo>

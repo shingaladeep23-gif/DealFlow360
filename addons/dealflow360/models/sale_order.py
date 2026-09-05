@@ -111,7 +111,11 @@ class SaleOrder(models.Model):
                 order.df_pipeline_stage = "pending_approval"
             elif order.df_approval_id.state == "approved":
                 order.df_pipeline_stage = "approved"
-            elif order.df_negotiation_ids:
+            elif order.df_negotiation_ids.filtered(lambda n: n.state == "proposed"):
+                # Only an UNANSWERED request parks a card here. Keying on any
+                # negotiation at all meant a deal stayed "In negotiation"
+                # forever once a customer had ever asked for anything, however
+                # long ago it was settled.
                 order.df_pipeline_stage = "negotiation"
             else:
                 order.df_pipeline_stage = "draft"

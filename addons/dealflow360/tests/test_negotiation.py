@@ -70,3 +70,90 @@ class TestNegotiation(TransactionCase):
         )
         with self.assertRaises(UserError):
             negotiation._apply()
+
+    # -- a request is answered, not self-executing -------------------------
+
+    def test_counter_never_raises_a_price(self):
+        """Reproduced live: a rep had given 14% and the customer's 3% counter
+        took the total from 1032 up to 1164, because _apply() overwrote every
+        line uniformly. A counter-discount asks for MORE off; it can never
+        claw back a discount the rep already granted."""
+        order = self._make_order(discount=14.0)
+        before = order.amount_total
+        negotiation = self.env["dealflow.negotiation"].create(
+            {"order_id": order.id, "counter_discount": 3.0}
+        )
+        negotiation.action_accept()
+        self.assertEqual(order.order_line.discount, 14.0, "the rep's discount stands")
+        self.assertLessEqual(order.amount_total, before)
+
+    def test_submitting_a_request_changes_nothing_on_its_own(self):
+        order = self._make_order(discount=0.0)
+        before = order.amount_total
+        negotiation = self.env["dealflow.negotiation"].create(
+            {"order_id": order.id, "counter_discount": 8.0}
+        )
+        self.assertEqual(negotiation.state, "proposed")
+        self.assertEqual(order.order_line.discount, 0.0)
+        self.assertEqual(order.amount_total, before)
+
+    def test_accepting_applies_it(self):
+        order = self._make_order(discount=0.0)
+        negotiation = self.env["dealflow.negotiation"].create(
+            {"order_id": order.id, "counter_discount": 8.0}
+        )
+        negotiation.action_accept()
+        self.assertEqual(negotiation.state, "applied")
+        self.assertEqual(order.order_line.discount, 8.0)
+        self.assertEqual(negotiation.applied_by_id, self.env.user)
+        self.assertTrue(negotiation.responded_on)
+
+    def test_declining_changes_no_price_and_needs_a_reason(self):
+        from odoo.exceptions import UserError
+
+        order = self._make_order(discount=0.0)
+        negotiation = self.env["dealflow.negotiation"].create(
+            {"order_id": order.id, "counter_discount": 8.0}
+        )
+        with self.assertRaises(UserError):
+            negotiation.action_reject()
+
+        negotiation.response_reason = "Margin is already thin on this one."
+        negotiation.action_reject()
+        self.assertEqual(negotiation.state, "rejected")
+        self.assertEqual(order.order_line.discount, 0.0)
+
+    def test_a_request_can_only_be_answered_once(self):
+        from odoo.exceptions import UserError
+
+        order = self._make_order(discount=0.0)
+        negotiation = self.env["dealflow.negotiation"].create(
+            {"order_id": order.id, "counter_discount": 8.0}
+        )
+        negotiation.action_accept()
+        with self.assertRaises(UserError):
+            negotiation.action_accept()
+
+    def test_accepting_an_over_ceiling_request_reroutes_and_audits(self):
+        order = self._make_order(discount=0.0)
+        negotiation = self.env["dealflow.negotiation"].create(
+            {"order_id": order.id, "counter_discount": 18.0}
+        )
+        negotiation.action_accept()
+        self.assertEqual(negotiation.state, "requires_reapproval")
+        self.assertEqual(order.df_approval_id.state, "pending")
+        self.assertTrue(
+            self.env["dealflow.audit.log"].search(
+                [("order_id", "=", order.id), ("action", "=", "reapproval")]
+            ),
+            "an automatic re-route is an audit event",
+        )
+
+    def test_an_answered_request_no_longer_parks_the_pipeline_card(self):
+        order = self._make_order(discount=0.0)
+        negotiation = self.env["dealflow.negotiation"].create(
+            {"order_id": order.id, "counter_discount": 5.0}
+        )
+        self.assertEqual(order.df_pipeline_stage, "negotiation")
+        negotiation.action_accept()
+        self.assertEqual(order.df_pipeline_stage, "draft")
