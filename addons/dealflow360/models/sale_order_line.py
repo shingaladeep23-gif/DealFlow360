@@ -40,11 +40,12 @@ class SaleOrderLine(models.Model):
             return 0.0
         pricelist = self.order_id.pricelist_id
         if pricelist:
-            return self.product_id.with_context(
-                pricelist=pricelist.id,
-                uom=self.product_uom.id if self.product_uom else False,
-                quantity=self.product_uom_qty or 1.0,
-            ).price
+            return pricelist._get_product_price(
+                self.product_id,
+                self.product_uom_qty or 1.0,
+                uom=self.product_uom or self.product_id.uom_id,
+                date=self.order_id.date_order,
+            )
         return self.product_id.list_price
 
     @api.depends(
