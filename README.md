@@ -41,15 +41,19 @@ docker compose exec odoo odoo -d dealflow360 -u dealflow360 --stop-after-init
 
 ### Effective discount ceiling
 
-A line's ceiling is `min(customer tier ceiling, product category ceiling)`.
+A line's ceiling is the **strictest ceiling that is actually configured** —
+`min()` across the customer tier and the product category, ignoring either one
+that is unset. A tier or category left at `0` counts as *unset*, not as a 0%
+ceiling; when neither is configured the line falls back to the admin-set
+`dealflow.default_max_discount` (default 5%).
 
 A Gold customer is allowed 15% generally — but Services are capped at 10% because their margins are thin. So an 18% discount on a setup service is **8 points over its limit**, and the whole quotation is flagged for approval even though "15%" sounded fine on paper.
 
 ### Blended risk score
 
 ```
-excess_i   = max(0, discount_i − min(tier_ceiling, category_ceiling))
-weight_i   = line_subtotal_i / order_subtotal
+excess_i   = max(0, discount_i − effective_ceiling_i)
+weight_i   = pre_discount_value_i / order_pre_discount_value
 
 risk_score = min(100, 6 × Σ(excess_i × weight_i) + 3 × max(excess_i))
 ```
@@ -60,7 +64,9 @@ risk_score = min(100, 6 × Σ(excess_i × weight_i) + 3 × max(excess_i))
 | MEDIUM | `0 < score ≤ 40` | Sales Manager |
 | HIGH | `score > 40` | Sales Manager → Finance |
 
-The weighted term accumulates many small overshoots; the max term ensures one badly over-limit line always trips approval on its own. Full rationale and worked examples in [`docs/decisions.md`](docs/decisions.md) (DEC-003).
+The weighted term accumulates many small overshoots; the max term ensures one badly over-limit line always trips approval on its own. Weights use each line's **pre-discount** reference value, not its post-discount subtotal — weighting by revenue actually collected would perversely shrink the weight of the worst offenders.
+
+An approval is bound to the deal it approved: `sale.order.df_governance_fingerprint` digests the customer tier and every line's product, quantity, price and discount, and `dealflow.approval` snapshots it at routing time. Editing a quotation under review supersedes its chain and writes an audit row. Full rationale and worked examples in [`docs/decisions.md`](docs/decisions.md) (DEC-003).
 
 ## Architecture
 
@@ -74,6 +80,8 @@ See [`docs/architecture.md`](docs/architecture.md) for the data model, state mac
 |---|---|
 | [`CLAUDE.md`](CLAUDE.md) | Engineering contract and git rules |
 | [`AGENTS.md`](AGENTS.md) | Team roles and working agreement |
+| [`docs/architecture_diagram.md`](docs/architecture_diagram.md) | **One-page architecture diagram** — data model and module connections |
+| [`docs/what_we_would_build_next.md`](docs/what_we_would_build_next.md) | **What we would build next**, and known limitations |
 | [`docs/architecture.md`](docs/architecture.md) | Architecture, data model, workflows |
 | [`docs/decisions.md`](docs/decisions.md) | Architectural decision record |
 | [`docs/task_plan.md`](docs/task_plan.md) | Phases, status, assignments |
