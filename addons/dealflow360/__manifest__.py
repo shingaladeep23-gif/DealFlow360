@@ -56,6 +56,8 @@ and deal health monitoring — built on native Odoo 17 Community models.
             "dealflow360/static/src/fields/approval_stepper/approval_stepper.xml",
             "dealflow360/static/src/fields/approval_step_actions/approval_step_actions.js",
             "dealflow360/static/src/fields/approval_step_actions/approval_step_actions.xml",
+            "dealflow360/static/src/fields/upsell_panel/upsell_panel.js",
+            "dealflow360/static/src/fields/upsell_panel/upsell_panel.xml",
             "dealflow360/static/src/fulfillment/fulfillment.js",
             "dealflow360/static/src/fulfillment/fulfillment.xml",
             "dealflow360/static/src/subscriptions/subscriptions.js",

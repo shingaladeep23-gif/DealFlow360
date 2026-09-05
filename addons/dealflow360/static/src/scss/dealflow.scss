@@ -345,3 +345,72 @@
         max-width: 640px;
     }
 }
+
+.o_df_upsell_panel {
+    margin: 4px 0 16px;
+
+    .o_df_upsell_header {
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: #1f2430;
+    }
+
+    .o_df_upsell_cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+    }
+
+    .o_df_upsell_card {
+        background-color: #fff;
+        border: 1px solid #e2e5e9;
+        border-radius: 6px;
+        padding: 14px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .o_df_upsell_card_name {
+        font-weight: 600;
+        color: #1f2430;
+    }
+
+    .o_df_upsell_card_margin {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .o_df_upsell_margin_label {
+        color: #6c757d;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+    }
+
+    .o_df_upsell_margin_value {
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+
+    .o_df_upsell_delta {
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 1px 6px;
+        border-radius: 8px;
+
+        &.o_df_upsell_delta_up { background-color: #d4edda; color: #1e7e34; }
+        &.o_df_upsell_delta_down { background-color: #f8d7da; color: #a71d2a; }
+    }
+
+    .o_df_upsell_card_reason {
+        color: #6c757d;
+        font-size: 0.85rem;
+        flex: 1;
+    }
+
+    .o_df_upsell_add {
+        align-self: flex-start;
+    }
+}

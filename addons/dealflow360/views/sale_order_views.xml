@@ -1,13 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- DF-005b: Screen 4 - Quotation Detail. Every field bound here already
-         exists on main (df_effective_ceiling/df_excess_points/df_margin_pct
-         on the line; df_margin_pct/df_blended_risk_score/df_risk_level/
-         df_risk_summary on the order - see models/sale_order*.py). Nothing
-         here is invented to match the mockup: the upsell panel and
-         "Submit for Approval" button are intentionally NOT built because
-         their backends (DF-008/DF-004) don't exist yet - see the
-         placeholder note below and docs/handoff.md. -->
+    <!-- DF-005b/DF-009: Screen 4 - Quotation Detail. Every field bound here
+         already exists on main (df_effective_ceiling/df_excess_points/
+         df_margin_pct on the line; df_margin_pct/df_blended_risk_score/
+         df_risk_level/df_risk_summary on the order - see
+         models/sale_order*.py). The upsell panel is bound to the always-
+         present "id" field purely as an OWL widget mount point (see
+         static/src/fields/upsell_panel/) - it is not a real editable
+         field, just the cleanest way to embed a widget without a new
+         model field. "Submit for Approval" is still not built (DF-004's
+         API differs from what this brief originally assumed - see
+         action_confirm's own routing instead). -->
     <record id="view_order_form_dealflow" model="ir.ui.view">
         <field name="name">sale.order.form.dealflow</field>
         <field name="model">sale.order</field>
@@ -54,10 +57,7 @@
                     <field name="df_risk_summary" nolabel="1" readonly="1"/>
                     — flagged for approval.
                 </div>
-                <div class="o_df_placeholder_panel">
-                    Upsell &amp; cross-sell suggestions are not shown here yet:
-                    the recommendation engine (DF-008) has not been built.
-                </div>
+                <field name="id" widget="dealflow_upsell_panel" nolabel="1"/>
             </xpath>
 
             <!-- Full detail tab kept for anyone auditing the raw governance

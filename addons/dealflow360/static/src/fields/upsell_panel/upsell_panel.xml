@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.UpsellPanel">
+        <div class="o_df_upsell_panel">
+            <div class="o_df_upsell_header">Upsell &amp; Cross-Sell Suggestions</div>
+            <div t-if="state.loading" class="o_df_placeholder_panel">Loading suggestions…</div>
+            <div t-elif="!state.recommendations.length" class="o_df_placeholder_panel">
+                No upsell suggestions for this quotation right now.
+            </div>
+            <div t-else="" class="o_df_upsell_cards">
+                <div t-foreach="state.recommendations" t-as="rec" t-key="rec.product_id" class="o_df_upsell_card">
+                    <div class="o_df_upsell_card_name" t-esc="rec.product_name"/>
+                    <div class="o_df_upsell_card_margin">
+                        <span class="o_df_upsell_margin_label">Projected margin</span>
+                        <span class="o_df_upsell_margin_value" t-esc="rec.projected_margin_pct.toFixed(1) + '%'"/>
+                        <span t-attf-class="o_df_upsell_delta {{rec.margin_delta_pct >= 0 ? 'o_df_upsell_delta_up' : 'o_df_upsell_delta_down'}}"
+                              t-esc="(rec.margin_delta_pct >= 0 ? '+' : '') + rec.margin_delta_pct.toFixed(1) + ' pts'"/>
+                    </div>
+                    <div class="o_df_upsell_card_reason" t-esc="rec.reason"/>
+                    <button class="btn btn-sm btn-primary o_df_upsell_add"
+                            t-att-disabled="state.adding === rec.product_id"
+                            t-on-click="() => this.addToQuote(rec.product_id)">
+                        <t t-if="state.adding === rec.product_id">Adding…</t>
+                        <t t-else="">+ Add to Quote</t>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </t>
+</templates>
