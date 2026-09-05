@@ -106,7 +106,17 @@ Never hardcode fake stock. Use real `stock.quant` data. Never claim AI/ML that i
 ## Definition of done
 
 A feature is **not** complete because code exists. It is complete when:
-implemented → tested (module upgrades cleanly, tests pass) → manually verified where applicable → documented → committed → pushed.
+implemented → tested (module upgrades cleanly, tests pass) → manually verified where applicable → committed → pushed.
+
+**SHIP MODE (in force from 2026-09-05, by the user's direct instruction).** Build features, not
+paperwork. The remaining time goes into working software.
+- **Do NOT write handoff.md entries, task_plan.md updates, decisions.md write-ups, or ui_spec
+  updates unless I explicitly ask.** They are no longer part of the definition of done.
+- Your commit message IS the documentation. One clear sentence on what changed and why.
+- Report to Michael in 3-5 lines: what landed, real test numbers, what is next. No essays.
+- A decision worth recording gets ONE line in the commit message, not a decision-record section.
+- Tests still matter — they are code, not docs. Real runner, real numbers, never a claimed pass.
+- Never fake business logic to make a screen look right. That rule does not relax.
 
 Always check: server logs, browser console, database state, permissions, workflow state, real Odoo records.
 
