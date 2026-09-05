@@ -6,6 +6,49 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-005b/c — Quotation Detail governance summary + risk gauge, Quotations Kanban pipeline — Kevin — 2026-09-05
+
+**Completed work**
+- Screen 4 (Quotation Detail): `views/sale_order_views.xml` now adds Limit (`df_effective_ceiling`), Excess (`df_excess_points`) and Margin (`df_margin_pct`) columns to the order line tree, with row/cell decoration turning red when `df_excess_points > 0`. An order-level summary box shows live margin and a reusable OWL `dealflow_risk_gauge` field widget bound to `df_blended_risk_score` (reads sibling `df_risk_level`/`df_risk_summary` off the same record). `df_risk_summary` is rendered as-is in a yellow flag banner, per the DF-005 brief (not re-derived). A labeled placeholder panel states the upsell/cross-sell teaser is not shown because DF-008 doesn't exist yet — no fabricated recommendation data.
+- Screen 3 (Quotations List/Pipeline): new `views/sale_order_kanban_views.xml` adds a kanban view grouped by `df_pipeline_stage` (cards show customer, margin, risk-level badge, amount) and extends `action_dealflow_quotations`'s `view_mode`/`views` to `kanban,tree,form` — done from a **separate file**, not by editing `views/dealflow_menus.xml` (Atlas's DF-003c carve-out), so the action record is updated without touching the locked file.
+- New reusable OWL widget: `static/src/fields/risk_gauge/{risk_gauge.js,risk_gauge.xml}` + `static/src/scss/dealflow.scss`, registered under `web.assets_backend` in `__manifest__.py`. Intended for reuse on Screen 7 (DF-006) per the UI spec.
+- Deliberately NOT built: "Submit for Approval" button (DF-004's `action_submit_for_approval()` doesn't exist) and the real upsell panel (DF-008 doesn't exist) — see CLAUDE.md's "no faking business logic" rule.
+
+**Important files**
+- `addons/dealflow360/views/sale_order_views.xml`
+- `addons/dealflow360/views/sale_order_kanban_views.xml` (new)
+- `addons/dealflow360/static/src/fields/risk_gauge/risk_gauge.js`, `risk_gauge.xml` (new)
+- `addons/dealflow360/static/src/scss/dealflow.scss` (new)
+- `addons/dealflow360/__manifest__.py` (appended `data`/new `assets` key)
+
+**Current state**
+- Pushed to `main` (`8b4ff6c`). XML-validated (`xmllint --noout`) and manifest-literal-checked; not yet a full Odoo test-runner concern since this task adds no Python/tests.
+- **Browser/console verification is incomplete** — see Known issues. `docker compose exec odoo odoo -d df_kevin -i dealflow360 --stop-after-init` installs cleanly (60 modules, 0 errors, includes both new view files loading without error) — that much is live-verified. Full interactive click-through (open a real quotation, see the gauge/banner/kanban render, check browser console) is not done yet.
+
+**Dependencies**
+- DF-006 (Approvals) can reuse `dealflow_risk_gauge` once DF-004 lands.
+- DF-005d (Sales Dashboard) is still open — not started this task.
+
+**Known issues**
+- **Found a real blocker while trying to browser-test df_kevin, reported to Michael separately (see hive outbox `stack-dbfilter-and-registry-issue`):** the shared stack's `odoo.conf` has `db_name = dealflow360` and no `dbfilter`, which makes Odoo's HTTP layer (`/web/database/list`, `/web/session/authenticate`, and silently `/web/login?db=<anything>`) resolve to `dealflow360` only — `df_kevin`/`df_pam` are real Postgres databases (confirmed via `psql -l`) and reachable via the Odoo CLI (`-d df_kevin -i dealflow360`), but not through a browser session. This means the OWL widget, kanban rendering and browser-console check for this task are still outstanding, through no code issue found so far — need `dbfilter` added to `odoo.conf` (Atlas's stack) before I can complete manual verification. Everything up to "module installs cleanly" is confirmed; visual/interactive confirmation is not.
+- Also observed (while briefly and unintentionally on `dealflow360` itself, due to the above dbfilter behavior): `sale.order` raised `KeyError` from the live registry for several requests around 07:39-07:41. No writes were made. Likely transient, coinciding with Atlas's concurrent DF-003b/DEC-015 work at that time; not chased further since it's not my lane and Atlas's own DF-003b entry above claims a clean, tested state as of this same day.
+
+**Remaining work**
+- Finish manual browser verification of Screen 3/4 (kanban render, risk gauge visual, flag banner, console-clean) once `df_kevin` is reachable via the web client.
+- DF-005d (Sales Dashboard, Screen 2) — not started.
+- DF-006 once DF-004 lands.
+
+**Recommended next task**
+- DF-005d (Sales Dashboard) can start now with partial counts (Open Quotations works today); Pending Approvals/At Risk Deals backfill when DF-004/DF-017 land.
+
+**Tests performed**
+- `xmllint --noout` on both changed/added XML view files — pass.
+- `python3 -m py_compile` on `__manifest__.py` — pass; manifest literal round-tripped via `ast.literal_eval` to confirm `data`/`assets` are well-formed.
+- `docker compose exec odoo odoo -d df_kevin -i dealflow360 --stop-after-init` — 60 modules loaded, 0 errors, both new view files load cleanly.
+- Not yet performed: interactive browser click-through and browser-console check (blocked on the dbfilter issue above).
+
+---
+
 ## DF-014/DF-016 (live-verified) — Pam — 2026-09-05
 
 **Completed work**

@@ -22,8 +22,8 @@
 |---|---|---|---|
 | DF-003 | Blended risk scoring engine per DEC-003 + backend unit tests | Atlas | ✅ engine (92993e8) + DEC-015 fix + 7 risk tests (DF-003b); 19/19 passing under the real Odoo test runner, live-verified against a cold-started stack |
 | DF-004 | Approval chain (`dealflow.approval`, steps, routing) + audit log | Atlas | ⬜ (unblocked — DF-003 is done and live-verified; `df_pipeline_stage` has a `pending_approval` value but nothing routes into it yet) |
-| DF-005 | Sales Workspace: dashboard, quotation list/pipeline, quotation builder UI | Don | ⬜ (design spec ready, see `docs/ui_spec.md`; code blocked on DF-002/003/004 + Docker) |
-| DF-006 | Approval list + approval detail UI with risk gauge and approval timeline | Don | ⬜ (design spec ready, see `docs/ui_spec.md`; blocked on DF-004) |
+| DF-005 | Sales Workspace: dashboard, quotation list/pipeline, quotation builder UI | Kevin | 🔄 DF-005b/c done (Quotation Detail governance summary + risk gauge, Quotations Kanban; commit `8b4ff6c`); browser/console verification pending a dbfilter fix on the shared stack (see `docs/handoff.md`); DF-005d (Sales Dashboard) not started |
+| DF-006 | Approval list + approval detail UI with risk gauge and approval timeline | Kevin | ⬜ (design spec ready, see `docs/ui_spec.md`; blocked on DF-004; can reuse the `dealflow_risk_gauge` OWL widget from DF-005b) |
 | DF-007 | QA the full slice: login → quote → over-limit discount → auto-routing → approve | Pam | ⬜ |
 
 ## Phase 4 — Upsell / Cross-sell
