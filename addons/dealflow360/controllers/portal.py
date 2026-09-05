@@ -41,6 +41,24 @@ class DealflowPortal(CustomerPortal):
                 raise
         return order_sudo
 
+    def _dealflow_portal_status(self, order, has_negotiation):
+        """AT-08 wants the customer-facing status vocabulary Sent / Under
+        Negotiation / Confirmed - sale.order.df_pipeline_stage doesn't cover
+        this (it's an internal Kanban grouping with no 'sent' value at all,
+        and 'negotiation' can only be driven by this portal's own
+        dealflow.negotiation records - see the seam comment on
+        models/sale_order.py). Computed here instead of adding a dependency
+        on that field, since it lives in Atlas's models/ lane."""
+        if order.state == "cancel":
+            return _("Cancelled")
+        if order.state == "sale":
+            return _("Confirmed")
+        if has_negotiation:
+            return _("Under Negotiation")
+        if order.state == "sent":
+            return _("Sent")
+        return _("Draft")
+
     @http.route(["/my/quotations", "/my/quotations/page/<int:page>"], type="http", auth="user", website=True)
     def dealflow_portal_quotations(self, page=1, **kwargs):
         Order = request.env["sale.order"]
@@ -58,10 +76,21 @@ class DealflowPortal(CustomerPortal):
         orders = Order.search(
             domain, order="date_order desc", limit=QUOTATION_PAGE_SIZE, offset=pager["offset"]
         )
+        negotiated_order_ids = set(
+            request.env["dealflow.negotiation"]
+            .sudo()
+            .search([("order_id", "in", orders.ids)])
+            .mapped("order_id.id")
+        )
+        statuses = {
+            order.id: self._dealflow_portal_status(order, order.id in negotiated_order_ids)
+            for order in orders
+        }
         return request.render(
             "dealflow360.portal_my_quotations",
             {
                 "orders": orders,
+                "statuses": statuses,
                 "pager": pager,
                 "page_name": "quotation",
                 "default_url": "/my/quotations",
@@ -82,6 +111,7 @@ class DealflowPortal(CustomerPortal):
             "dealflow360.portal_my_quotation_detail",
             {
                 "order": order_sudo,
+                "portal_status": self._dealflow_portal_status(order_sudo, bool(negotiations)),
                 "negotiations": negotiations,
                 "page_name": "quotation",
             },

@@ -36,8 +36,8 @@
                                 </td>
                                 <td><span t-field="order.date_order" t-options="{'widget': 'date'}"/></td>
                                 <td>
-                                    <span t-esc="order.df_pipeline_stage"
-                                          t-attf-class="badge text-bg-#{'success' if order.df_pipeline_stage == 'confirmed' else 'info'}"/>
+                                    <span t-esc="statuses[order.id]"
+                                          t-attf-class="badge text-bg-#{'success' if order.state == 'sale' else 'info'}"/>
                                 </td>
                                 <td class="text-end">
                                     <span t-field="order.amount_total" t-options="{'widget': 'monetary', 'display_currency': order.currency_id}"/>
@@ -58,8 +58,8 @@
                 <div class="col-12">
                     <h3>
                         Quotation <t t-esc="order.name"/>
-                        <span t-esc="order.df_pipeline_stage"
-                              t-attf-class="badge text-bg-#{'success' if order.df_pipeline_stage == 'confirmed' else 'info'} ms-2"/>
+                        <span t-esc="portal_status"
+                              t-attf-class="badge text-bg-#{'success' if order.state == 'sale' else 'info'} ms-2"/>
                     </h3>
 
                     <table class="table">

@@ -270,3 +270,12 @@ Buckets: **≥80 Healthy · 50–79 At Risk · <50 Critical**
   - *Make quotations auto-follow their customer on creation* — rejected for this pass: would require editing `sale_order.py` (Atlas's file under the concurrency lane rule) and conflates "who gets emailed" with "who has read access," which is exactly the coupling DEC-007/012 rejected in the first place.
   - *Modify/replace the native rule* — rejected, same reasoning as DEC-012.
 - **Status:** Accepted — binding on DF-014/DF-016.
+
+---
+
+## DEC-019 — Portal status label is computed in the controller, not read from `df_pipeline_stage`
+
+- **Date:** 2026-09-05
+- **Decision:** `controllers/portal.py`'s `_dealflow_portal_status(order, has_negotiation)` derives the customer-facing status (Draft/Sent/Under Negotiation/Confirmed/Cancelled) from native `sale.order.state` plus whether any `dealflow.negotiation` exists for the order — it does not read or depend on `sale.order.df_pipeline_stage`.
+- **Reason:** AT-08 requires the portal show "Sent / Under Negotiation / Confirmed." `df_pipeline_stage` (`models/sale_order.py`) is a different thing — its own docstring calls it "Mockup screen 3's Kanban grouping" for the *internal* workspace, its selection has no `sent` value at all, and today it only ever computes `draft`/`confirmed` (the `pending_approval`/`approved`/`negotiation` values are an explicit seam waiting on DF-004 and this task). Making the portal correct required a value this task's data (order.state + this model's own negotiation records) already fully determines — computing it here needed no change to `sale_order.py` (Atlas's lane) at all.
+- **Status:** Accepted — binding on DF-014/DF-016. If Atlas's DF-004 later makes `df_pipeline_stage` cover `sent`/`negotiation` too, revisit whether the portal should switch to reading it instead of keeping a second definition — not urgent while the vocabularies differ (Kanban grouping vs. customer-facing status).
