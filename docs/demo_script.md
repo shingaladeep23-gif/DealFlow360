@@ -46,12 +46,21 @@ approval cycle completes. **S00016 is the deal to drive live.**
 
 **Verified end-to-end on 2026-09-05.**
 
-1. Log in as `admin`. Open **DealFlow360 › Dashboard**.
-   Real aggregates over `sale.order` — pipeline counts, values, risk spread,
-   deals awaiting approval. (Dashboard reads via `orm.searchCount` /
-   `searchRead`; there is no mock data path in it.)
+1. Log in as `admin`. Click the **9-dot app-grid icon** (top-left) → the
+   **DealFlow360** tile. It opens on the **Dashboard** by default.
 
-2. **DealFlow360 › Quotations** → open **S00016 — Acme Q1 fleet refresh**.
+   Three real stat cards — **Open Quotations / Pending Approvals / At Risk
+   Deals** — each a `search_count` on `sale.order`, plus a Recent Quotations
+   table from a real `search_read` ordered by `write_date`. No hardcoded
+   numbers anywhere in `dashboard.js`.
+
+   Top nav: Dashboard | Quotations | Invoices | Products | Configuration.
+
+   *(Verified in a real Chrome session, zero console errors on every screen.)*
+
+2. **Quotations** → kanban pipeline (Screen 3), grouped by
+   `df_pipeline_stage`, with a table-view toggle. Open
+   **S00016 — Acme Q1 fleet refresh**.
    Show the lines: ProBook ×35 at **30%**, Docking ×35 at **28%**,
    Setup ×4 at **18%** — all above the Gold/Hardware ceilings.
 
