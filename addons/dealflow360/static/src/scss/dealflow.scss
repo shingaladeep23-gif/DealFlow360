@@ -184,6 +184,7 @@
     &:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
 
     &.o_df_stat_card_warning { border-left-color: #ffc107; }
+    &.o_df_stat_card_success { border-left-color: #28a745; }
     &.o_df_stat_card_danger { border-left-color: #dc3545; }
     &.o_df_stat_card_active { box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.4); }
 }

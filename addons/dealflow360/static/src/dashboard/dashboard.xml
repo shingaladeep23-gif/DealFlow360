@@ -24,6 +24,11 @@
                     <div class="o_df_stat_value" t-esc="state.pendingApprovals"/>
                     <div class="o_df_stat_hint">Held up until someone signs off</div>
                 </div>
+                <div class="o_df_stat_card o_df_stat_card_success" t-on-click="() => this.openQuotations([['df_pipeline_stage', '=', 'approved']])">
+                    <div class="o_df_stat_label">Approved</div>
+                    <div class="o_df_stat_value" t-esc="state.approvedDeals"/>
+                    <div class="o_df_stat_hint">Cleared and with the customer</div>
+                </div>
                 <div class="o_df_stat_card o_df_stat_card_danger" t-on-click="() => this.openQuotations([['df_risk_level', 'in', ['medium', 'high']]])">
                     <div class="o_df_stat_label">Over the discount limit</div>
                     <div class="o_df_stat_value" t-esc="state.atRiskDeals"/>

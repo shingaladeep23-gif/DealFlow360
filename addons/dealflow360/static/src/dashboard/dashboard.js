@@ -34,6 +34,7 @@ export class DealflowDashboard extends Component {
         this.state = useState({
             openQuotations: 0,
             pendingApprovals: 0,
+            approvedDeals: 0,
             atRiskDeals: 0,
             recentOrders: [],
             loading: true,
@@ -42,13 +43,29 @@ export class DealflowDashboard extends Component {
     }
 
     async loadData() {
-        const [openQuotations, pendingApprovals, atRiskDeals, recentOrders] =
-            await Promise.all([
+        const [
+            openQuotations,
+            pendingApprovals,
+            approvedDeals,
+            atRiskDeals,
+            recentOrders,
+        ] = await Promise.all([
                 this.orm.searchCount("sale.order", [
                     ["state", "in", ["draft", "sent"]],
                 ]),
                 this.orm.searchCount("sale.order", [
                     ["df_pipeline_stage", "=", "pending_approval"],
+                ]),
+                // The card that was missing. A deal that has cleared every
+                // approval step goes back to being the REP's move - the
+                // customer has to accept it - but the dashboard only ever
+                // showed what was open, what was stuck in someone else's queue
+                // and what was over the limit. A fully approved quotation
+                // appeared on none of them as anything distinguishable, so
+                // "manager and finance approved it and then it vanished" was
+                // the honest description of the rep's experience.
+                this.orm.searchCount("sale.order", [
+                    ["df_pipeline_stage", "=", "approved"],
                 ]),
                 this.orm.searchCount("sale.order", [
                     ["df_risk_level", "in", ["medium", "high"]],
@@ -70,6 +87,7 @@ export class DealflowDashboard extends Component {
         Object.assign(this.state, {
             openQuotations,
             pendingApprovals,
+            approvedDeals,
             atRiskDeals,
             recentOrders: recentOrders.map((order) => ({
                 ...order,
