@@ -1,8 +1,21 @@
-from odoo import api, fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError
 
 
 class SaleOrder(models.Model):
     _inherit = "sale.order"
+
+    df_approval_id = fields.Many2one(
+        "dealflow.approval",
+        string="Approval Chain",
+        readonly=True,
+        copy=False,
+        help="Most recent DF-004 approval chain routed for this quotation. "
+        "A rejected/revision chain is superseded by a fresh one on the next "
+        "confirm attempt or reapproval trigger - this always points at the "
+        "latest one, and older ones remain in the audit trail via "
+        "dealflow.audit.log.",
+    )
 
     df_margin_pct = fields.Float(
         string="Margin (%)",
@@ -22,10 +35,10 @@ class SaleOrder(models.Model):
         string="Pipeline Stage",
         compute="_compute_df_pipeline_stage",
         store=True,
-        help="Mockup screen 3's Kanban grouping. Only 'draft' and 'confirmed' "
-        "are derivable from native state today - this is a deliberate seam: "
-        "DF-004's approval chain will drive pending_approval/approved, and "
-        "DF-014/015's portal negotiation model will drive negotiation.",
+        help="Mockup screen 3's Kanban grouping, driven by native state plus "
+        "DF-004's df_approval_id.state. Negotiation is driven by "
+        "DF-014/015's portal negotiation model (see DEC-019 for why the "
+        "customer-facing portal status is computed separately).",
     )
 
     @api.depends(
@@ -46,10 +59,17 @@ class SaleOrder(models.Model):
                 (revenue - cost) / revenue * 100.0 if revenue else 0.0
             )
 
-    @api.depends("state")
+    @api.depends("state", "df_approval_id.state")
     def _compute_df_pipeline_stage(self):
         for order in self:
-            order.df_pipeline_stage = "confirmed" if order.state == "sale" else "draft"
+            if order.state == "sale":
+                order.df_pipeline_stage = "confirmed"
+            elif order.df_approval_id.state == "pending":
+                order.df_pipeline_stage = "pending_approval"
+            elif order.df_approval_id.state == "approved":
+                order.df_pipeline_stage = "approved"
+            else:
+                order.df_pipeline_stage = "draft"
 
     df_blended_risk_score = fields.Float(
         string="Blended Risk Score",
@@ -145,3 +165,62 @@ class SaleOrder(models.Model):
                         score,
                     )
                 )
+
+    def action_confirm(self):
+        """DF-004/AT-04: a quotation whose blended risk is MEDIUM/HIGH is
+        never confirmed directly - clicking Confirm on it instead routes it
+        (or re-routes it, if the previous chain was rejected/needs revision)
+        into a dealflow.approval chain, automatically, without the rep ever
+        requesting approval by hand. Confirmation stays blocked while a
+        chain is pending; once every step is approved a further Confirm
+        click proceeds through native sale.order.action_confirm normally.
+        Orders with risk NONE are never touched by this override.
+        """
+        routed = self.env["sale.order"]
+        to_confirm = self.env["sale.order"]
+        for order in self:
+            if order.df_risk_level == "none":
+                to_confirm |= order
+                continue
+            approval = order.df_approval_id
+            if approval.state == "approved":
+                to_confirm |= order
+            elif approval.state == "pending":
+                step = approval.current_step_id
+                raise UserError(
+                    _("%(name)s cannot be confirmed: it is pending %(role)s approval.")
+                    % {
+                        "name": order.name,
+                        "role": step._role_label() if step else _("further"),
+                    }
+                )
+            else:
+                # No chain yet, or the previous one was rejected/sent back
+                # for revision and the rep re-attempted confirm - route a
+                # fresh chain now, per AT-04's "automatically" requirement.
+                new_approval = self.env["dealflow.approval"]._create_for_order(order)
+                order.df_approval_id = new_approval.id
+                routed |= order
+        confirmed = super(SaleOrder, to_confirm).action_confirm() if to_confirm else True
+        if routed:
+            raise UserError(
+                _(
+                    "The following quotations exceeded their discount ceiling "
+                    "and have been routed for approval instead of being "
+                    "confirmed: %s"
+                )
+                % ", ".join(routed.mapped("name"))
+            )
+        return confirmed
+
+    def _df_trigger_reapproval(self, negotiation=None):
+        """DF-014/AT-09: called by dealflow.negotiation._apply() when a
+        customer counter-discount pushes the order's risk back above
+        threshold. Creates a fresh approval chain (a new audit entry per the
+        'submitted' log inside _create_for_order) and points df_approval_id
+        at it, exactly as if the rep had re-attempted Confirm.
+        """
+        self.ensure_one()
+        approval = self.env["dealflow.approval"]._create_for_order(self)
+        self.df_approval_id = approval.id
+        return approval

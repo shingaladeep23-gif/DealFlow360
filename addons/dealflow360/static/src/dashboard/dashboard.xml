@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.Dashboard">
+        <div class="o_df_dashboard">
+            <div class="o_df_dashboard_header">
+                <h2>Sales Dashboard</h2>
+                <div class="o_df_dashboard_actions">
+                    <button class="btn btn-primary" t-on-click="openNewQuotation">+ New Quotation</button>
+                    <button class="btn btn-secondary" t-on-click="() => this.openQuotations([['df_pipeline_stage', '=', 'pending_approval']])">
+                        View Approvals
+                    </button>
+                </div>
+            </div>
+
+            <div class="o_df_dashboard_cards">
+                <div class="o_df_stat_card" t-on-click="() => this.openQuotations([['state', 'in', ['draft', 'sent']]])">
+                    <div class="o_df_stat_label">Open Quotations</div>
+                    <div class="o_df_stat_value" t-esc="state.openQuotations"/>
+                </div>
+                <div class="o_df_stat_card o_df_stat_card_warning" t-on-click="() => this.openQuotations([['df_pipeline_stage', '=', 'pending_approval']])">
+                    <div class="o_df_stat_label">Pending Approvals</div>
+                    <div class="o_df_stat_value" t-esc="state.pendingApprovals"/>
+                </div>
+                <div class="o_df_stat_card o_df_stat_card_danger" t-on-click="() => this.openQuotations([['df_risk_level', 'in', ['medium', 'high']]])">
+                    <div class="o_df_stat_label">At Risk Deals</div>
+                    <div class="o_df_stat_value" t-esc="state.atRiskDeals"/>
+                </div>
+            </div>
+
+            <div class="o_df_dashboard_activity">
+                <h3>Recent Quotations</h3>
+                <table t-if="state.recentOrders.length" class="o_df_activity_table">
+                    <thead>
+                        <tr>
+                            <th>Quotation</th>
+                            <th>Customer</th>
+                            <th>Amount</th>
+                            <th>Risk</th>
+                            <th>Last Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="state.recentOrders" t-as="order" t-key="order.id" t-on-click="() => this.openOrder(order.id)">
+                            <td t-esc="order.name"/>
+                            <td t-esc="order.partner_id[1]"/>
+                            <td t-esc="order.amount_total.toLocaleString(undefined, {style: 'currency', currency: 'USD'})"/>
+                            <td>
+                                <span t-attf-class="o_df_risk_badge o_df_risk_badge_#{order.df_risk_level}" t-esc="order.df_risk_level"/>
+                            </td>
+                            <td t-esc="order.write_date"/>
+                        </tr>
+                    </tbody>
+                </table>
+                <div t-else="" class="o_df_placeholder_panel">
+                    No quotations yet — create one to see activity here.
+                </div>
+            </div>
+        </div>
+    </t>
+</templates>

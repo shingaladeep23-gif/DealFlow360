@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- DF-005d: Screen 2 - Sales Dashboard / Home. OWL client action
+         registered under tag "dealflow_dashboard" (see
+         static/src/dashboard/dashboard.js). Only sets the action on the
+         placeholder menu_dealflow_dashboard defined in dealflow_menus.xml -
+         does not redefine the menu itself. Uses the eval='ir.actions...,%d'
+         form per god's 358f292 fix (a bare %(xmlid)d on ir.ui.menu.action
+         breaks the reference field). -->
+    <record id="action_dealflow_dashboard" model="ir.actions.client">
+        <field name="name">Dashboard</field>
+        <field name="tag">dealflow_dashboard</field>
+    </record>
+
+    <menuitem id="menu_dealflow_dashboard"
+              parent="menu_dealflow_root"
+              action="action_dealflow_dashboard"
+              sequence="10"/>
+</odoo>

@@ -60,6 +60,10 @@ class DealflowNegotiation(models.Model):
         lines.write({"discount": self.counter_discount})
         risk_after = order.df_risk_level
         new_state = "requires_reapproval" if risk_after in ("medium", "high") else "applied"
+        if new_state == "requires_reapproval":
+            # DF-004/AT-09: automatically re-enters the approval flow - a
+            # fresh dealflow.approval chain, not a manual request.
+            order._df_trigger_reapproval(self)
         self.write(
             {
                 "state": new_state,
