@@ -205,3 +205,35 @@ Buckets: **≥80 Healthy · 50–79 At Risk · <50 Critical**
 - **Reason:** Raised by Pam in DF-001d, who found Finance had *zero* access — not even read — because no ACL row grants it and Finance's `implied_ids` do not reach Sales Rep. Finance's role in the problem statement is to handle second-level approval of high-risk discounts. An approver who cannot see the ceiling being enforced cannot meaningfully judge the exception, and the approval screen would fail to render the governance context. This was an oversight, not a deliberate restriction.
 - **Alternatives considered:** Leave Finance with no access and surface ceilings only via computed fields on `sale.order` — rejected: fragile, and it hides the actual rule from the person accountable for the exception. Grant Finance write — rejected: separation of duties, the approver must not be able to move the goalposts they are approving against.
 - **Status:** Accepted
+
+---
+
+## DEC-014 — `product.category.df_max_discount` is the single source of truth; drop `dealflow.category.limit`
+
+- **Date:** 2026-09-05
+- **Decision:** Delete the `dealflow.category.limit` model. Category discount ceilings live **only** on `product.category.df_max_discount`. The Admin "Category Limits" screen becomes a tree/form view over `product.category` exposing that field.
+
+- **Reason:** Found by Pam in DF-002-QA. The original architecture (my error) specified **both** `dealflow.category.limit` *and* `product.category.df_max_discount`, with nothing linking them. The governance compute reads only `product.category.df_max_discount` (`sale_order_line.py:70`), so an admin editing a ceiling through the intended Configuration screen saw it save successfully **with zero effect on quotation behaviour** — a governance illusion behind a menu built for exactly that purpose. Pam confirmed live: editing the Hardware limit 15 → 2 left `product.category.df_max_discount` at 15 and a fresh Hardware line still computed a ceiling of 15.
+
+  `product.category` already exists and is the natural home for a per-category ceiling, so extending it satisfies the native-first rule and removes any possibility of desync. A write-through (`inverse`/`related`) between the two models would work but keeps two records where one will do, and a custom model shadowing a native field is the wrong direction.
+
+  **Note the asymmetry, which is correct and must be preserved:** `dealflow.discount.tier` **stays**. Odoo has no native concept of a customer discount tier, so that model earns its existence — and because `res.partner.df_tier_id` points at it directly, the ceiling the compute reads *is* the field the admin edits. Pam verified live that editing a tier takes effect immediately. Only the category side was redundant.
+
+- **Alternatives considered:**
+  - *Keep both, add an inverse/write-through* — rejected: preserves two sources of truth and a permanent sync burden to fix a problem that disappears by deleting one of them.
+  - *Make `product.category.df_max_discount` a related field off `dealflow.category.limit`* — rejected: inverts native-first, making a custom model authoritative over a native one.
+- **Status:** Accepted — supersedes the `dealflow.category.limit` row in architecture.md §3.2.
+
+---
+
+## DEC-015 — Pricelist price must be read via `pricelist._get_product_price()`
+
+- **Date:** 2026-09-05
+- **Decision:** Resolve a tier's pricelist-adjusted price with `pricelist._get_product_price(product, quantity, uom=..., date=...)`. Do **not** use `product.with_context(pricelist=...).price`.
+- **Reason:** Found by Pam in DF-002-QA and independently confirmed against the installed Odoo 17 source: **there is no `price` field on `product.template` or `product.product`** — only `list_price` (template) and `lst_price` (product), neither of which is pricelist-aware. `product.pricelist._get_product_price()` is the supported API. The previous call raised `AttributeError: 'product.product' object has no attribute 'price'`, meaning the affected quotation line could not be saved at all.
+
+  The bug was dormant only because no `product.pricelist` records exist yet. Seeding DEC-009's per-tier pricelists — an already-accepted decision — would have made **every quotation for every tier customer unsaveable**.
+
+  DEC-009's *design* was never in question: comparing the rep's actual price against the pricelist-adjusted reference, so the pricelist's own reduction is never double-counted as rep discount, remains correct. This was a wrong-attribute-name defect inside a correct design.
+- **Process note:** Michael reviewed this code and passed it, reasoning about the formula while assuming the attribute access was valid. Pam grepped the installed core source instead and was right. **Verify API surface against the installed version, not from memory** — the formula being right is not evidence that the field exists.
+- **Status:** Accepted
