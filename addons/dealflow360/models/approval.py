@@ -188,7 +188,17 @@ class DealflowApproval(models.Model):
 
     def _advance(self):
         """Called after a step is approved: activate the next waiting step,
-        or close the chain out as fully approved."""
+        or close the chain out as fully approved.
+
+        Closing the chain is not the end of the story. Approval used to be a
+        dead end: every step went green, the chain went to 'approved', and the
+        order sat in state 'draft' with nothing telling the rep it had cleared
+        and nothing putting it in front of the customer. Live-reproduced -
+        manager and finance both approved a HIGH-risk quotation and it stayed
+        state='draft', invisible on the rep's dashboard and absent from the
+        customer's portal list. The order-side hook below is what turns a
+        granted approval into something that actually happens.
+        """
         self.ensure_one()
         remaining = self.step_ids.filtered(lambda s: s.state == "waiting").sorted("sequence")
         if remaining:
@@ -197,6 +207,7 @@ class DealflowApproval(models.Model):
             )
         else:
             self._df_engine().write({"state": "approved"})
+            self.order_id._df_on_approval_granted()
 
     def _reject(self):
         self.ensure_one()

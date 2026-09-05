@@ -402,6 +402,66 @@ class SaleOrder(models.Model):
             }
         return confirmed
 
+    def _df_on_approval_granted(self):
+        """Called by dealflow.approval._advance() the moment a chain closes as
+        fully approved. Turns "the chain went green" into something the rep and
+        the customer can actually see.
+
+        Before this, approval was a dead end. Every step went green, the chain
+        went to 'approved' - and the order stayed in state 'draft' with no
+        chatter entry, no audit line and nothing in front of the customer. The
+        rep had no way to learn their deal had cleared short of reopening the
+        record and reading the approval tab, and the quotation was never sent
+        to anybody. Live-reproduced on a HIGH-risk quotation: manager approved,
+        finance approved, `covers?` returned True, and the order was still
+        state='draft'.
+
+        Three things happen here, all of them things a human would otherwise
+        have had to remember to do:
+
+        1. The quotation is marked SENT. That is what puts it in front of the
+           customer as a live quotation rather than someone's private draft,
+           and it is the state the portal's own Confirm button reads. It is
+           deliberately NOT auto-confirmed: the customer accepting the deal is
+           their decision, and confirming for them would make the portal
+           negotiate/confirm flow unreachable.
+        2. The rep is told, on the record they own, via the chatter.
+        3. The decision is written to the audit trail, so "approved and
+           released to the customer" is one auditable event rather than an
+           inference from two unrelated timestamps.
+
+        sudo() throughout: the actor here is FINANCE or a SALES MANAGER, who
+        has no business writing the salesperson's quotation - this is the
+        system releasing the deal in response to their decision, exactly like
+        the engine recordset on dealflow.approval. Same reasoning as
+        _create_for_order() and audit_log._log().
+        """
+        for order in self:
+            if order.state not in ("draft", "sent"):
+                # Already confirmed or cancelled - a late-arriving approval has
+                # nothing left to release.
+                continue
+            order_sudo = order.sudo()
+            if order.state == "draft":
+                order_sudo.write({"state": "sent"})
+            order_sudo.message_post(
+                body=_(
+                    "Approved. This quotation has cleared every approval step "
+                    "and is now available to %(customer)s in their portal."
+                )
+                % {"customer": order.partner_id.display_name},
+                subtype_xmlid="mail.mt_note",
+            )
+            self.env["dealflow.audit.log"]._log(
+                order,
+                "approved",
+                _(
+                    "Approval chain complete - quotation released to "
+                    "%(customer)s for acceptance."
+                )
+                % {"customer": order.partner_id.display_name},
+            )
+
     def _df_trigger_reapproval(self, negotiation=None):
         """DF-014/AT-09: called by dealflow.negotiation._apply() when a
         customer counter-discount pushes the order's risk back above
