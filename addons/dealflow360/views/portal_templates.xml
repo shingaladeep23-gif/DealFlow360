@@ -122,11 +122,11 @@
                             </t>
                             <ul class="list-group">
                                 <li class="list-group-item" t-foreach="negotiations" t-as="neg">
+                                    <!-- AT-08: never expose margin, internal risk score or
+                                         approval-chain internals to the customer - status
+                                         wording only, no risk_level_before/after. -->
                                     <t t-esc="neg.counter_discount"/>% proposed —
                                     <span t-esc="neg.state"/>
-                                    <t t-if="neg.risk_level_after">
-                                        (risk: <t t-esc="neg.risk_level_before"/> → <t t-esc="neg.risk_level_after"/>)
-                                    </t>
                                 </li>
                             </ul>
                         </div>
