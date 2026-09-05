@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- DF-005c: Screen 3 - Quotations (List/Pipeline). Kanban grouped by
+         sale.order.df_pipeline_stage (Draft/Pending Approval/Approved/
+         Negotiation/Confirmed). Only draft/confirmed are reachable today -
+         pending_approval/approved/negotiation are seams for DF-004/DF-014
+         (see models/sale_order.py::_compute_df_pipeline_stage) - the other
+         three columns render empty until those land, which is correct, not
+         a bug. Lives in its own file, not views/dealflow_menus.xml, because
+         that file is Atlas's exclusively for DF-003c (see docs/handoff.md);
+         the action record below re-targets the SAME external id that file
+         defines, extending its view_mode/views without editing it. -->
+    <record id="view_order_kanban_dealflow" model="ir.ui.view">
+        <field name="name">sale.order.kanban.dealflow</field>
+        <field name="model">sale.order</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="df_pipeline_stage" class="o_kanban_small_column">
+                <field name="partner_id"/>
+                <field name="amount_total"/>
+                <field name="currency_id"/>
+                <field name="df_risk_level"/>
+                <field name="df_margin_pct"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_card oe_kanban_global_click o_df_risk_#{record.df_risk_level.raw_value}">
+                            <div class="o_kanban_record_top">
+                                <div class="o_kanban_record_headings">
+                                    <strong class="o_kanban_record_title">
+                                        <field name="name"/>
+                                    </strong>
+                                </div>
+                            </div>
+                            <div class="o_kanban_record_body">
+                                <field name="partner_id"/>
+                                <div class="text-muted">
+                                    Margin: <field name="df_margin_pct" widget="float" digits="[1,1]"/>%
+                                </div>
+                            </div>
+                            <div class="o_kanban_record_bottom">
+                                <div class="oe_kanban_bottom_left">
+                                    <field name="amount_total" widget="monetary"/>
+                                </div>
+                                <div class="oe_kanban_bottom_right">
+                                    <field name="df_risk_level" widget="label_selection"
+                                           options="{'classes': {'none': 'success', 'medium': 'warning', 'high': 'danger'}}"/>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="action_dealflow_quotations" model="ir.actions.act_window">
+        <field name="view_mode">kanban,tree,form</field>
+        <field name="views" eval="[(ref('view_order_kanban_dealflow'), 'kanban'),
+                                    (False, 'tree'),
+                                    (False, 'form')]"/>
+    </record>
+</odoo>

@@ -1,0 +1,63 @@
+.o_df_risk_gauge {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 180px;
+
+    .o_df_risk_gauge_bar {
+        height: 8px;
+        border-radius: 4px;
+        background-color: #e9ecef;
+        overflow: hidden;
+    }
+    .o_df_risk_gauge_fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.2s ease-in-out;
+    }
+    .o_df_risk_gauge_label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.85rem;
+    }
+    .o_df_risk_gauge_badge {
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 10px;
+    }
+    .o_df_risk_gauge_score {
+        color: #6c757d;
+    }
+
+    &.o_df_risk_none {
+        .o_df_risk_gauge_fill { background-color: #28a745; }
+        .o_df_risk_gauge_badge { background-color: #d4edda; color: #1e7e34; }
+    }
+    &.o_df_risk_medium {
+        .o_df_risk_gauge_fill { background-color: #ffc107; }
+        .o_df_risk_gauge_badge { background-color: #fff3cd; color: #85640a; }
+    }
+    &.o_df_risk_high {
+        .o_df_risk_gauge_fill { background-color: #dc3545; }
+        .o_df_risk_gauge_badge { background-color: #f8d7da; color: #a71d2a; }
+    }
+}
+
+.o_df_flag_banner {
+    background-color: #fff8e1;
+    border: 1px solid #f0d78c;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    color: #7a5c00;
+}
+
+.o_df_placeholder_panel {
+    background-color: #f8f9fa;
+    border: 1px dashed #ced4da;
+    border-radius: 4px;
+    padding: 10px 12px;
+    color: #6c757d;
+    font-style: italic;
+}

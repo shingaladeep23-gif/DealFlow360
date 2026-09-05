@@ -1,18 +1,64 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Minimal field placement so DF-002's governance/margin values are
-         verifiable in the UI. Don owns the real quotation builder screens
-         (docs/ui_spec.md) - this is not that. -->
+    <!-- DF-005b: Screen 4 - Quotation Detail. Every field bound here already
+         exists on main (df_effective_ceiling/df_excess_points/df_margin_pct
+         on the line; df_margin_pct/df_blended_risk_score/df_risk_level/
+         df_risk_summary on the order - see models/sale_order*.py). Nothing
+         here is invented to match the mockup: the upsell panel and
+         "Submit for Approval" button are intentionally NOT built because
+         their backends (DF-008/DF-004) don't exist yet - see the
+         placeholder note below and docs/handoff.md. -->
     <record id="view_order_form_dealflow" model="ir.ui.view">
         <field name="name">sale.order.form.dealflow</field>
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//field[@name='order_line']/tree" position="inside">
-                <field name="df_effective_ceiling" optional="show"/>
-                <field name="df_excess_points" optional="show"/>
-                <field name="df_margin_pct" optional="show"/>
+            <!-- Line table: governance ceiling/excess and live margin,
+                 right after the native discount column. Row turns red when
+                 the rep's discount blows through df_effective_ceiling -
+                 the mockup's "Status: Over Limit" is this decoration, not a
+                 stored field (DEC-003 defines excess as the source of
+                 truth; a separate status field would just be able to
+                 drift out of sync with it). -->
+            <xpath expr="//field[@name='order_line']/tree" position="attributes">
+                <attribute name="decoration-danger">df_excess_points > 0</attribute>
             </xpath>
+            <xpath expr="//field[@name='order_line']/tree/field[@name='discount']" position="after">
+                <field name="df_effective_ceiling" string="Limit (%)" optional="show"/>
+                <field name="df_excess_points" string="Excess (pts)" optional="show"
+                       decoration-danger="df_excess_points > 0"/>
+                <field name="df_margin_pct" string="Margin (%)" optional="show"/>
+            </xpath>
+
+            <!-- Order-level summary: live margin + blended risk gauge, and
+                 the flag banner explaining why (df_risk_summary is written
+                 by the engine to be displayed as-is - DF-005 brief says use
+                 it rather than re-deriving the sentence here). -->
+            <xpath expr="//notebook" position="before">
+                <group col="2" class="o_df_summary_group">
+                    <group string="Live Margin">
+                        <div>
+                            <field name="df_margin_pct" nolabel="1" digits="[1,1]"/>%
+                        </div>
+                    </group>
+                    <group string="Discount Risk">
+                        <field name="df_risk_summary" invisible="1"/>
+                        <field name="df_risk_level" invisible="1"/>
+                        <field name="df_blended_risk_score" widget="dealflow_risk_gauge" nolabel="1"/>
+                    </group>
+                </group>
+                <div class="o_df_flag_banner" invisible="not df_risk_summary">
+                    <field name="df_risk_summary" nolabel="1" readonly="1"/>
+                    — flagged for approval.
+                </div>
+                <div class="o_df_placeholder_panel">
+                    Upsell &amp; cross-sell suggestions are not shown here yet:
+                    the recommendation engine (DF-008) has not been built.
+                </div>
+            </xpath>
+
+            <!-- Full detail tab kept for anyone auditing the raw governance
+                 fields (QA, admins) alongside the compact summary above. -->
             <xpath expr="//notebook" position="inside">
                 <page string="DealFlow360" name="dealflow360">
                     <group>

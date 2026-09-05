@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.RiskGauge">
+        <div class="o_df_risk_gauge" t-att-class="'o_df_risk_' + level">
+            <div class="o_df_risk_gauge_bar">
+                <div class="o_df_risk_gauge_fill" t-attf-style="width: {{Math.min(100, score)}}%"/>
+            </div>
+            <div class="o_df_risk_gauge_label">
+                <span class="o_df_risk_gauge_badge" t-esc="levelLabel"/>
+                <span class="o_df_risk_gauge_score" t-esc="Math.round(score)"/>
+            </div>
+        </div>
+    </t>
+</templates>
