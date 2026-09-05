@@ -13,6 +13,15 @@ class ResConfigSettings(models.TransientModel):
         "this score, a sales manager alone can approve it. Only this "
         "boundary is configurable; the scoring itself lives in code.",
     )
+    dealflow_default_max_discount = fields.Float(
+        string="Default discount limit (%)",
+        config_parameter="dealflow.default_max_discount",
+        default=5.0,
+        help="The discount limit that applies to a line when neither the "
+        "customer's tier nor the product's category sets one. A tier or "
+        "category left at 0 counts as UNSET, not as a 0% ceiling - otherwise "
+        "every quotation to a customer with no tier yet would need approval.",
+    )
     dealflow_health_stalled_days = fields.Integer(
         string="Call a deal stalled after (days)",
         config_parameter="dealflow.health_stalled_days",

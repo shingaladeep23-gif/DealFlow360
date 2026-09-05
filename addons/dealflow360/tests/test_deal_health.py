@@ -155,10 +155,13 @@ class TestDealHealth(TransactionCase):
 
     def test_approval_delay_signal_after_backdating_pending_since(self):
         self.env["ir.config_parameter"].sudo().set_param("dealflow.health_approval_delay_days", "2")
-        zero_ceiling = self.env["product.category"].create(
-            {"name": "Health Approval Delay Category", "df_max_discount": 0.0}
+        # 1% rather than 0%: a category ceiling of 0 now means UNSET
+        # (it falls back to the tier, then to dealflow.default_max_discount),
+        # so a genuinely strict ceiling has to be a real positive number.
+        strict = self.env["product.category"].create(
+            {"name": "Health Approval Delay Category", "df_max_discount": 1.0}
         )
-        product = self._make_product("Health Approval Delay Product", 1000.0, 600.0, zero_ceiling)
+        product = self._make_product("Health Approval Delay Product", 1000.0, 600.0, strict)
         order = self.env["sale.order"].create({"partner_id": self.acme.id, "user_id": self.rep.id})
         self._make_line(order, product, 1, discount=5.0)  # excess -> medium/high risk
 

@@ -83,10 +83,13 @@ class TestRiskEngine(TransactionCase):
     def test_risk_score_caps_at_100(self):
         """A single wildly-over-ceiling line pushes 6*blended + 3*max well
         past 100; the score must clip at the cap, never exceed it."""
-        zero_ceiling = self.env["product.category"].create(
-            {"name": "Zero Ceiling Test Category", "df_max_discount": 0.0}
+        # 1% rather than 0%: a category ceiling of 0 now means UNSET
+        # (it falls back to the tier, then to dealflow.default_max_discount),
+        # so a genuinely strict ceiling has to be a real positive number.
+        strict = self.env["product.category"].create(
+            {"name": "Strict Ceiling Test Category", "df_max_discount": 1.0}
         )
-        product = self._make_product("Cap Test Product", zero_ceiling, 1000.0)
+        product = self._make_product("Cap Test Product", strict, 1000.0)
         order = self.env["sale.order"].create({"partner_id": self.acme.id})
         self._make_line(order, product, 1, 90.0)
 
@@ -108,22 +111,25 @@ class TestRiskEngine(TransactionCase):
         """DEC-010: the MEDIUM/HIGH boundary is data (ir.config_parameter
         'dealflow.risk_high_min'), not the hardcoded 40. Set it to 27 and
         prove both sides of the boundary respond to the configured value,
-        not the default. Single line, zero-ceiling category, so
-        excess == discount and score == 9 * excess (6+3 weighted at weight 1)."""
+        not the default. Single line at a strict 1% ceiling, so
+        excess == discount - 1 and score == 9 * excess (6+3 at weight 1)."""
         self.env["ir.config_parameter"].sudo().set_param("dealflow.risk_high_min", "27")
-        zero_ceiling = self.env["product.category"].create(
-            {"name": "Boundary Test Category", "df_max_discount": 0.0}
+        # 1% rather than 0%: a category ceiling of 0 now means UNSET
+        # (it falls back to the tier, then to dealflow.default_max_discount),
+        # so a genuinely strict ceiling has to be a real positive number.
+        strict = self.env["product.category"].create(
+            {"name": "Boundary Test Category", "df_max_discount": 1.0}
         )
-        product = self._make_product("Boundary Test Product", zero_ceiling, 1000.0)
+        product = self._make_product("Boundary Test Product", strict, 1000.0)
         order = self.env["sale.order"].create({"partner_id": self.acme.id})
-        line = self._make_line(order, product, 1, 3.0)  # excess=3 -> score=27
+        line = self._make_line(order, product, 1, 4.0)  # excess=3 -> score=27
 
         self.assertAlmostEqual(order.df_blended_risk_score, 27.0, places=6)
         self.assertEqual(
             order.df_risk_level, "medium", "score == threshold must stay MEDIUM (condition is score > threshold)"
         )
 
-        line.write({"discount": 4.0})  # excess=4 -> score=36 > 27
+        line.write({"discount": 5.0})  # excess=4 -> score=36 > 27
         self.assertAlmostEqual(order.df_blended_risk_score, 36.0, places=6)
         self.assertEqual(order.df_risk_level, "high")
 

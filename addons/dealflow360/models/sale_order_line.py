@@ -86,6 +86,19 @@ class SaleOrderLine(models.Model):
         "order_id.pricelist_id",
     )
     def _compute_df_governance(self):
+        # An UNSET ceiling means "this axis places no limit", not "no discount
+        # allowed". Both fields default to 0.0, and min(0, anything) is 0, so
+        # the old code read every unconfigured tier or category as a hard 0%
+        # ceiling: a brand-new customer given 2% came out "Needs manager
+        # approval", and every product in Odoo's stock "All"/"Saleable"
+        # categories was ungoverned-and-therefore-forbidden. Reproduced live.
+        # Where neither axis is configured, fall back to an admin-set default
+        # rather than to zero.
+        default_ceiling = float(
+            self.env["ir.config_parameter"]
+            .sudo()
+            .get_param("dealflow.default_max_discount", 5.0)
+        )
         for line in self:
             if not line.product_id:
                 line.df_effective_ceiling = 0.0
@@ -95,7 +108,10 @@ class SaleOrderLine(models.Model):
             tier = line.order_id.partner_id.df_tier_id
             tier_ceiling = tier.max_discount if tier else 0.0
             category_ceiling = line.product_id.categ_id.df_max_discount
-            line.df_effective_ceiling = min(tier_ceiling, category_ceiling)
+            configured = [c for c in (tier_ceiling, category_ceiling) if c > 0.0]
+            line.df_effective_ceiling = (
+                min(configured) if configured else default_ceiling
+            )
 
             reference_price = line._df_reference_price()
             actual_unit_price = line.price_unit * (1 - (line.discount or 0.0) / 100.0)

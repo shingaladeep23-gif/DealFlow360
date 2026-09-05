@@ -103,25 +103,29 @@ class TestApproval(TransactionCase):
         self._expect_user_error(order.action_confirm)
 
     def _medium_risk_order(self):
-        # Hardware ceiling 15%, single line at 20% -> excess 5, score 45*... let's
-        # just use zero-ceiling category style from test_risk_engine for a clean
-        # deterministic MEDIUM (score <= 40) case: excess 3 -> score 27 (< 40).
-        zero_ceiling = self.env["product.category"].create(
-            {"name": "Approval MEDIUM Category", "df_max_discount": 0.0}
+        # A deterministic MEDIUM (score <= 40): excess 3 -> score 27.
+        # 1% rather than 0%: a category ceiling of 0 now means UNSET
+        # (it falls back to the tier, then to dealflow.default_max_discount),
+        # so a genuinely strict ceiling has to be a real positive number.
+        strict = self.env["product.category"].create(
+            {"name": "Approval MEDIUM Category", "df_max_discount": 1.0}
         )
-        product = self._make_product("Approval MEDIUM Product", zero_ceiling, 1000.0)
+        product = self._make_product("Approval MEDIUM Product", strict, 1000.0)
         order = self.env["sale.order"].create({"partner_id": self.acme.id})
-        self._make_line(order, product, 1, 3.0)  # excess=3 -> score=27 -> MEDIUM
+        self._make_line(order, product, 1, 4.0)  # excess=3 -> score=27 -> MEDIUM
         self.assertEqual(order.df_risk_level, "medium")
         return order
 
     def _high_risk_order(self):
-        zero_ceiling = self.env["product.category"].create(
-            {"name": "Approval HIGH Category", "df_max_discount": 0.0}
+        # 1% rather than 0%: a category ceiling of 0 now means UNSET
+        # (it falls back to the tier, then to dealflow.default_max_discount),
+        # so a genuinely strict ceiling has to be a real positive number.
+        strict = self.env["product.category"].create(
+            {"name": "Approval HIGH Category", "df_max_discount": 1.0}
         )
-        product = self._make_product("Approval HIGH Product", zero_ceiling, 1000.0)
+        product = self._make_product("Approval HIGH Product", strict, 1000.0)
         order = self.env["sale.order"].create({"partner_id": self.acme.id})
-        self._make_line(order, product, 1, 10.0)  # excess=10 -> score=90 -> HIGH
+        self._make_line(order, product, 1, 11.0)  # excess=10 -> score=90 -> HIGH
         self.assertEqual(order.df_risk_level, "high")
         return order
 
