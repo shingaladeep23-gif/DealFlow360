@@ -263,3 +263,49 @@ asserting on state produced by a raising call will see nothing. Use a plain
   a plain `restart` does not always clear the registry cache.
 - **Module fails to load** — check the newest XML edit first; a malformed
   view aborts the whole module install.
+
+---
+
+## 6. Demo database safety
+
+The demo database is **`dealflow360`** and only the integrator writes to it.
+Agents test against their own scratch databases (`df_don`, `df_atlas_test`,
+`df_pam`, `df_darryl`).
+
+**This is not paperwork — it has already gone wrong once.** A test of
+`sale.order.action_add_upsell_line(product_id, qty=1.0)` was run against the
+demo database and destroyed the live demo deal: S00016 was stripped to a
+single `Core Plan` line, total **34,164.00 → 999.00**, risk **100 → 0**, and
+its customer switched away from Acme Corp. A demo of a 999.00 quotation with
+risk 0 triggers no approval at all — the exact opposite of the product's
+point. It was caught only because a routine role-count check returned 2
+quotations instead of 3.
+
+**Snapshot before any phase where write-methods get tested:**
+
+```bash
+docker compose exec -T db pg_dump -U odoo -d dealflow360 > demo-snapshot.sql
+```
+
+**Restore:**
+
+```bash
+docker compose exec -T db psql -U odoo -d postgres -c "DROP DATABASE dealflow360;"
+docker compose exec -T db psql -U odoo -d postgres -c "CREATE DATABASE dealflow360 OWNER odoo;"
+docker compose exec -T db psql -U odoo -d dealflow360 < demo-snapshot.sql
+```
+
+### Integrity check — run after every integration
+
+Per-role record **counts** are the tell. An error message is obvious; a
+wrong count is not, and that is what caught the corruption:
+
+| Account | Should see |
+|---|---|
+| `acme.customer` | **3** — S00001, S00002, S00016 |
+| `beta.customer` | **1** — S00003 |
+| `df.rep` | **3** — own deals only |
+| `df.manager` / `df.finance` / `df.admin` | **4** |
+
+Plus: 1 warehouse split · 2 approval chains · 2 posted invoices ·
+**S00016 must be `draft`, Acme Corp, total 34,164.00, risk 100.**
