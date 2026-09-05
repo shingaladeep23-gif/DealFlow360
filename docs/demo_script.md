@@ -1,64 +1,146 @@
-# DealFlow360 — Five Minute Demo Script
+# DealFlow360 — Demo Script
 
-**Setup before demoing:** stack running at `http://localhost:8069`, database `dealflow360` freshly seeded, three browser profiles ready (Rep, Manager, Customer).
+**Every step below was executed against the live stack before being written down.**
+Nothing here is aspirational. If a step is unverified it says so explicitly.
 
-**Seed facts the demo relies on**
-- **Acme Corp** — Gold tier (15% general ceiling)
-- Category ceilings: **Hardware 15%**, **Services 10%**
-- Products: *ProBook Laptop* (Hardware), *Onsite Setup Service* (Services), *Core Plan* (recurring, yearly), *Docking Station* (Hardware, promoted upsell)
-- Warehouses: **Main Warehouse** and **East Depot**, deliberately seeded so one laptop order must split
+Last rehearsed: 2026-09-05, by Michael (integrator).
 
 ---
 
-## FLOW 1 — Sales Rep: quote to fulfillment (≈3 min)
+## 0. Environment
 
-| # | Action | What the judge should see |
-|---|---|---|
-| 1 | Log in as the **sales rep**, open the Sales Workspace | Dashboard: pending approvals, open quotations, at-risk deals |
-| 2 | Create a quotation for **Acme Corp** | Customer tier shows **Gold**, ceiling 15% |
-| 3 | Add **ProBook Laptop**, discount **12%** | Line shows within limit — ceiling `min(15,15)=15`, 0 points over. Live margin indicator updates |
-| 4 | Add **Onsite Setup Service**, discount **18%** | Line flags **8 points over** — ceiling is `min(15,10)=10`, not 15. *Say out loud: the customer is Gold, but Services are stricter* |
-| 5 | Point at the **blended risk score** | Score **40 → MEDIUM**. Explain: revenue-weighted overshoot plus a worst-line term, so neither one bad line nor many small ones slip through |
-| 6 | Accept an **upsell** suggestion (*Docking Station*, promoted) | Margin delta shown before adding; after adding, order total **and** margin update immediately — a real order line was written |
-| 7 | Submit the quotation | It routes for approval **automatically** — the rep never clicked "request approval" |
-| 8 | Switch to the **Sales Manager**, open Approvals | Approval detail: risk score, the offending line, approval timeline. Click **Approve** |
-| 9 | Show the **audit trail** | User, timestamp and reason recorded for the approval |
-| 10 | Open **Fulfillment** | Suggested split: e.g. 6 units from Main Warehouse, 4 from East Depot, with shipment count and cost. Click **Accept Suggested Split** → real stock pickings created; shortfall becomes a **backorder** |
-| 11 | Open **Subscriptions / Billing** | One-time lines and the recurring *Core Plan* shown **separately** on the same order, with the upcoming billing schedule |
+| | |
+|---|---|
+| URL | **http://localhost:8069** |
+| Database | **`dealflow360`** |
+| Login | **`admin` / `admin`** |
+| Stack | `docker compose up -d` (Odoo 17 Community + PostgreSQL 15) |
+| Module | `dealflow360` — installs clean, 58 modules, 0 errors |
+
+If the stack is cold, `docker compose up -d` then wait for `/web/login` to answer.
 
 ---
 
-## FLOW 2 — Customer: portal negotiation to payment (≈2 min)
+## 1. Demo data already in the database
 
-| # | Action | What the judge should see |
-|---|---|---|
-| 1 | Open the **customer portal** in a separate browser profile, log in as Acme Corp | A genuinely different, restricted UI — no internal menus, no margin, no risk score |
-| 2 | **Security beat:** try to open another customer's quotation by ID | Access denied — blocked by an ORM record rule, not just a controller check |
-| 3 | Open the quotation, add a **line-level comment** | Comment persists and is visible to the rep internally |
-| 4 | Submit a **counter-discount** — push the Service line higher | Status becomes **Under Negotiation** |
-| 5 | Back on the internal side, show the recalculated risk | Score recomputed; the order has **automatically re-entered the approval flow** — no one triggered it manually |
-| 6 | As the **Sales Manager**, approve the renegotiated terms | New approval chain, new audit entry |
-| 7 | As the **customer**, click **Confirm Quotation** | Order confirmed — a real sale order |
-| 8 | Show the **invoice**, register a **payment** | `account.move` created; invoice status moves to **Paid** |
-| 9 | Close on the **Deal Health dashboard** | Stalled deals, discount anomalies, approval delays, delivery slippage. Click an alert → opens the related quotation |
+| Order | Deal | Total | Risk | Level | Stage |
+|---|---|---|---|---|---|
+| S00001 | Acme — standard refresh | 11,400.00 | **0** | none | draft |
+| S00002 | Acme — Q4 expansion | 38,040.00 | **100** | high | **confirmed** |
+| S00003 | Beta Industries — platform rollout | 26,148.60 | **52.8** | high | draft |
+| S00016 | **Acme — Q1 fleet refresh (LIVE DEMO DEAL)** | 34,164.00 | **100** | high | **draft** |
 
----
+Every risk number above is computed by the engine from line discounts against
+category/tier ceilings. None are stored constants.
 
-## Closing line (15 s)
+Supporting records: Acme Corp, Beta Industries · ProBook Laptop (1200),
+Docking Station (150), Onsite Setup Service (300), Core Plan (999) ·
+Main Warehouse, East Depot · Bronze / Silver / Gold discount tiers.
 
-> "Every number you saw came from application logic against real records — the risk score, the warehouse split, the billing schedule and the reapproval trigger are all computed, not staged. The formulas are documented in `docs/decisions.md`."
-
-## What we'd build next
-
-- Multi-currency and multi-company support (explicitly a bonus, not a requirement)
-- Statistically-grounded anomaly detection once enough historical deal data exists
-- Exact-optimisation warehouse allocation with real carrier rates
-- Customer-facing negotiation history and quote versioning/diffs
+**S00002 is deliberately left confirmed** — it is the proof that the whole
+approval cycle completes. **S00016 is the deal to drive live.**
 
 ---
 
-## If something breaks mid-demo
+## 2. FLOW 1 — the self-governing deal (primary wow moment)
 
-- Approval didn't trigger → open the order form, the risk score field is computed and visible there
-- Portal login issue → the internal Approvals list still proves routing and the audit trail
-- Stack down → `docker compose up -d`, then re-seed
+**Verified end-to-end on 2026-09-05.**
+
+1. Log in as `admin`. Open **DealFlow360 › Dashboard**.
+   Real aggregates over `sale.order` — pipeline counts, values, risk spread,
+   deals awaiting approval. (Dashboard reads via `orm.searchCount` /
+   `searchRead`; there is no mock data path in it.)
+
+2. **DealFlow360 › Quotations** → open **S00016 — Acme Q1 fleet refresh**.
+   Show the lines: ProBook ×35 at **30%**, Docking ×35 at **28%**,
+   Setup ×4 at **18%** — all above the Gold/Hardware ceilings.
+
+3. Point at the governance summary and risk gauge:
+   **blended risk score 100, level `high`.** Compare with S00001 (10%
+   discount → risk **0**, level `none`). Same engine, different inputs.
+
+4. Press **Confirm**. The system refuses:
+
+   > The following quotations exceeded their discount ceiling and have been
+   > routed for approval instead of being confirmed: S00016
+
+   The order stays in `draft`, `df_pipeline_stage` becomes
+   **`pending_approval`**, and a real `dealflow.approval` chain is created
+   with two steps: **sales_manager (pending) → finance (waiting)**.
+
+   *This is the point of the product: the deal governed itself.*
+
+5. **DealFlow360 › Approvals** — the deal is now queued for a manager.
+
+6. Approve as Sales Manager, then as Finance. The chain moves
+   `pending → approved`, each step flipping in order, and audit rows are
+   written for every transition.
+
+7. Press **Confirm** again — **it now succeeds**: order state `sale`,
+   pipeline stage `confirmed`.
+
+**Role enforcement is real:** attempting to approve as a user who is not a
+Sales Manager raises
+`UserError: Only a Sales Manager may act on this approval step.`
+Worth demonstrating — it proves the chain is not cosmetic.
+
+---
+
+## 3. FLOW 2 — customer negotiation (portal)
+
+**Partially verified.** Verified by QA against the live server with real
+browser-equivalent sessions:
+
+- portal customer opens **their own** quotation → **200**, correct status
+- portal customer opens **another customer's** quotation → **403**
+- posting a counter-discount flips the order to **Under Negotiation**
+- `_df_trigger_reapproval` exists on `sale.order` and re-raises approval
+
+**Not yet rehearsed as one continuous browser walk:** counter-discount →
+reapproval → manager approves → customer confirms. Demo this flow only if
+QA has confirmed the full walk; otherwise show the verified portions and
+say plainly that the last leg is not yet rehearsed.
+
+**Do not claim anything in this section that has not been re-verified on
+the day.**
+
+---
+
+## 4. Honest status — what to say if asked
+
+**Working and demonstrable**
+- Discount governance: configurable tier/category ceilings, excess points
+- Blended risk scoring (DEC-003), configurable threshold (`dealflow.risk_high_min` = 40.0)
+- Approval chain: auto-routing on ceiling breach, multi-step, role-enforced, audited
+- Confirmation blocked while approval pending; succeeds once approved
+- Customer portal: own-quotation access, cross-customer access denied, counter-discount
+- Invoices screens (native `account.move`)
+- Dashboard over real ORM aggregates
+
+**Not implemented — say so, do not improvise**
+- **Warehouse allocation / split fulfillment / backorders (DF-010/011)** — no
+  allocation models exist. The Fulfillment menu is not backed by an engine.
+- Deal-health scoring cron (DF-017) and the health dashboard (DF-018)
+- Recurring billing / proration (DF-012)
+
+**Test baseline:** 41 passed / 17 failed of 58. Of the failures, 9 are a
+trigger-semantics mismatch in `test_approval.py` (tests assert an approval
+exists without calling `action_confirm`; the implementation raises it on
+confirm) and 8 are an Odoo `HttpCase` harness artifact — a `RecursionError`
+in `res.lang`/`ir.model.access` cache on the first request after a worker
+registry reload, producing spurious 500s. The portal behaviour those tests
+cover was verified correct against a real running server.
+
+---
+
+## 5. If something breaks mid-demo
+
+- **Screens empty / AccessError on `sale.order`** — a record rule is hiding
+  rows from internal users. The global rules in `security/dealflow_security.xml`
+  must keep their `if user.share else [(1,'=',1)]` gate. Re-apply with
+  `docker compose exec -T odoo odoo -u dealflow360 -d dealflow360 --stop-after-init --no-http`.
+- **Stale permissions after a DB-level change** — fully recreate the web
+  container (`docker compose stop odoo && docker compose up -d odoo`);
+  a plain `restart` does not always clear the registry cache.
+- **Module fails to load** — check the newest XML edit first; a malformed
+  view aborts the whole module install.
