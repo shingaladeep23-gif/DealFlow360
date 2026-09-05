@@ -65,7 +65,7 @@
 
 ## Current state
 
-- **Current:** DF-002 done — `sale.order`/`sale.order.line` governance fields (`df_effective_ceiling`, `df_excess_points`, `df_margin_pct`, `df_pipeline_stage`) live, both problem-statement worked examples confirmed by passing tests, DEC-009 (pricelist-aware excess) and DEC-010 (no hardcoded threshold) respected. See `docs/handoff.md` DF-002 entry.
+- **Current:** DF-001e done — fixed 3 security findings from Pam's DF-001d smoke test (menu scoping to DealFlow groups, menu-group non-cascade to Configuration's children, Finance read ACL on tier/category-limit per DEC-013). See `docs/handoff.md` DF-001e entry. DF-002 (governance fields) also done — see DF-002 entry.
 - **Next:** DF-003 (blended risk engine, DEC-003 + configurable threshold DEC-010) → DF-004 (approval chain), then Don picks up DF-005b/c per `docs/ui_spec.md`
 - **Blocked:** none
 

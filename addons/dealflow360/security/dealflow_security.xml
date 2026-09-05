@@ -17,6 +17,9 @@
         <record id="group_dealflow_sales_manager" model="res.groups">
             <field name="name">Sales Manager</field>
             <field name="category_id" ref="module_category_dealflow360"/>
+            <!-- sales_team.group_sale_manager is the Sales app's own "Administrator"
+                 level (full CRM/Sales access) - it is NOT base.group_system and
+                 grants no wider Odoo admin/superuser rights. -->
             <field name="implied_ids" eval="[(4, ref('group_dealflow_sales_rep')), (4, ref('sales_team.group_sale_manager'))]"/>
             <field name="comment">First approval step for MEDIUM and HIGH risk quotations.</field>
         </record>

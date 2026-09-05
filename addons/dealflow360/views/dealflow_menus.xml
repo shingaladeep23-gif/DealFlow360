@@ -1,7 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- DF-001e: every menu below is scoped to the DealFlow groups. Odoo does
+         NOT cascade a parent menu's groups_id to its children (confirmed by
+         Pam in DF-001d), so each menuitem carries its own groups attribute -
+         restricting only the root would leave children individually
+         reachable. group_dealflow_sales_manager and group_dealflow_admin
+         imply group_dealflow_sales_rep (see dealflow_security.xml), so
+         listing group_dealflow_sales_rep already covers Manager and Admin;
+         group_dealflow_finance is listed separately wherever Finance needs
+         the item, since Finance does not imply sales_rep. -->
+
     <!-- Root application menu -->
-    <menuitem id="menu_dealflow_root" name="DealFlow360" sequence="5"/>
+    <menuitem id="menu_dealflow_root" name="DealFlow360" sequence="5"
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
 
     <!-- Quotations: native sale.order, extended in later phases -->
     <record id="action_dealflow_quotations" model="ir.actions.act_window">
@@ -10,23 +21,38 @@
         <field name="view_mode">tree,form</field>
         <field name="domain">[('state', 'in', ('draft', 'sent'))]</field>
     </record>
-    <menuitem id="menu_dealflow_dashboard" name="Dashboard" parent="menu_dealflow_root" sequence="10"/>
+    <menuitem id="menu_dealflow_dashboard" name="Dashboard" parent="menu_dealflow_root" sequence="10"
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
     <menuitem id="menu_dealflow_quotations" name="Quotations" parent="menu_dealflow_root"
-              action="action_dealflow_quotations" sequence="20"/>
-    <menuitem id="menu_dealflow_approvals" name="Approvals" parent="menu_dealflow_root" sequence="30"/>
-    <menuitem id="menu_dealflow_fulfillment" name="Fulfillment" parent="menu_dealflow_root" sequence="40"/>
-    <menuitem id="menu_dealflow_subscriptions" name="Subscriptions" parent="menu_dealflow_root" sequence="50"/>
-    <menuitem id="menu_dealflow_invoices" name="Invoices" parent="menu_dealflow_root" sequence="60"/>
-    <menuitem id="menu_dealflow_deal_health" name="Deal Health" parent="menu_dealflow_root" sequence="70"/>
-    <menuitem id="menu_dealflow_reports" name="Reports" parent="menu_dealflow_root" sequence="80"/>
+              action="action_dealflow_quotations" sequence="20"
+              groups="group_dealflow_sales_rep"/>
+    <menuitem id="menu_dealflow_approvals" name="Approvals" parent="menu_dealflow_root" sequence="30"
+              groups="group_dealflow_sales_manager,group_dealflow_finance"/>
+    <menuitem id="menu_dealflow_fulfillment" name="Fulfillment" parent="menu_dealflow_root" sequence="40"
+              groups="group_dealflow_sales_rep"/>
+    <menuitem id="menu_dealflow_subscriptions" name="Subscriptions" parent="menu_dealflow_root" sequence="50"
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
+    <menuitem id="menu_dealflow_invoices" name="Invoices" parent="menu_dealflow_root" sequence="60"
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
+    <menuitem id="menu_dealflow_deal_health" name="Deal Health" parent="menu_dealflow_root" sequence="70"
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
+    <menuitem id="menu_dealflow_reports" name="Reports" parent="menu_dealflow_root" sequence="80"
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
     <menuitem id="menu_dealflow_products" name="Products" parent="menu_dealflow_root"
-              action="action_dealflow_product_template" sequence="90"/>
+              action="action_dealflow_product_template" sequence="90"
+              groups="group_dealflow_sales_rep"/>
 
-    <!-- Configuration (admin only): verify DF-001 seed models in the UI -->
+    <!-- Configuration (admin only): verify DF-001 seed models in the UI.
+         Finance has read ACL on these two models per DEC-013 (so it can see
+         the ceilings behind an approval it is judging), but navigation stays
+         admin-only here - Finance's read is meant to surface via the
+         approval screen (DF-004/DF-006), not this raw config menu. -->
     <menuitem id="menu_dealflow_configuration" name="Configuration" parent="menu_dealflow_root"
               groups="group_dealflow_admin" sequence="100"/>
     <menuitem id="menu_dealflow_discount_tiers" name="Discount Tiers" parent="menu_dealflow_configuration"
-              action="action_dealflow_discount_tier" sequence="10"/>
+              action="action_dealflow_discount_tier" sequence="10"
+              groups="group_dealflow_admin"/>
     <menuitem id="menu_dealflow_category_limits" name="Category Limits" parent="menu_dealflow_configuration"
-              action="action_dealflow_category_limit" sequence="20"/>
+              action="action_dealflow_category_limit" sequence="20"
+              groups="group_dealflow_admin"/>
 </odoo>

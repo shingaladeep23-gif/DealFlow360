@@ -6,6 +6,41 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-001e — Security cleanup from Pam's DF-001d smoke test — Atlas — 2026-09-05
+
+**Completed work**
+- **Menu scoping (finding 1):** all 13 `dealflow360` menus (root + 9 top-level children + Configuration + its 2 children) now carry `groups`, where previously only Configuration did. `menu_dealflow_root` and the general-purpose children (Dashboard, Approvals, Subscriptions, Invoices, Deal Health, Reports) are scoped to `group_dealflow_sales_rep,group_dealflow_finance`; Quotations/Fulfillment/Products (rep-only work) to `group_dealflow_sales_rep`; Approvals to `group_dealflow_sales_manager,group_dealflow_finance` (the two approver roles). `group_dealflow_sales_manager`/`group_dealflow_admin` imply `group_dealflow_sales_rep` (see `dealflow_security.xml`), so listing `sales_rep` already covers Manager and Admin — Finance is listed separately everywhere it needs access since Finance does not imply `sales_rep`.
+- **Menu cascade (finding 2):** `Discount Tiers` and `Category Limits` now each carry their own `groups="group_dealflow_admin"` — confirmed Odoo does not inherit a parent's `groups_id` to children, so the Configuration folder being admin-only did not previously protect its two child menu items from being individually navigable.
+- **DEC-013 (finding 3):** added `access_dealflow_discount_tier_finance` / `access_dealflow_category_limit_finance` rows to `ir.model.access.csv` granting Finance **read-only** access to both models (write/create/unlink remain Admin-only, unchanged) — Finance previously had zero access to the ceilings it needs to see when approving a HIGH-risk quotation.
+- Added a one-line XML comment on `group_dealflow_sales_manager`'s `implied_ids` noting `sales_team.group_sale_manager` is the Sales app's own "Administrator" level, not `base.group_system` — so the bare word doesn't misread as an escalation in a future diff review.
+
+**Important files**
+- `addons/dealflow360/views/dealflow_menus.xml` (all `groups` attributes added)
+- `addons/dealflow360/security/ir.model.access.csv` (2 new Finance rows)
+- `addons/dealflow360/security/dealflow_security.xml` (comment only)
+
+**Current state**
+- Verified live: `-u dealflow360 --test-enable --stop-after-init` — 0 errors, all 12 existing tests still pass (no regression).
+- Verified the fix actually took effect, not just "installed without error" — queried `ir_model_access` directly: Finance now has `perm_read=t, perm_write=f` on both `dealflow.discount.tier` and `dealflow.category.limit`. Queried `ir_ui_menu`/`ir_ui_menu_group_rel` via each menu's xmlid and confirmed the exact group set on all 13 menus matches what was written (e.g. `menu_dealflow_discount_tiers` → `{Admin}` only, `menu_dealflow_root` → `{Sales Rep, Finance}`, `menu_dealflow_approvals` → `{Sales Manager, Finance}`).
+
+**Dependencies**
+- None. This was a standalone fix requested ahead of DF-003.
+
+**Known issues**
+- None found. This closes all three DF-001d findings; Pam's underlying report already confirmed the ACL write-block was sound (Rep/Manager could not write ceilings) — these were navigation/visibility and read-access gaps only.
+
+**Remaining work**
+- None for this task. DF-003 (blended risk engine) is next.
+
+**Recommended next task**
+- DF-003, per god's release.
+
+**Tests performed**
+- `docker compose exec odoo odoo -d dealflow360 -u dealflow360 --test-enable --stop-after-init` — 0 errors, 12/12 tests pass (no new tests needed — this is a data/security fix, not new business logic).
+- Direct `psql` verification of `ir_model_access` (Finance read-only rows) and `ir_ui_menu`/`ir_ui_menu_group_rel` (exact group set per menu via xmlid) — both confirmed as specified above.
+
+---
+
 ## DF-002 — Quotation Core: sale.order/sale.order.line governance fields — Atlas — 2026-09-05
 
 **Completed work**

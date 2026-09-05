@@ -1,5 +1,7 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_dealflow_discount_tier_rep,dealflow.discount.tier.rep,model_dealflow_discount_tier,group_dealflow_sales_rep,1,0,0,0
+access_dealflow_discount_tier_finance,dealflow.discount.tier.finance,model_dealflow_discount_tier,group_dealflow_finance,1,0,0,0
 access_dealflow_discount_tier_admin,dealflow.discount.tier.admin,model_dealflow_discount_tier,group_dealflow_admin,1,1,1,1
 access_dealflow_category_limit_rep,dealflow.category.limit.rep,model_dealflow_category_limit,group_dealflow_sales_rep,1,0,0,0
+access_dealflow_category_limit_finance,dealflow.category.limit.finance,model_dealflow_category_limit,group_dealflow_finance,1,0,0,0
 access_dealflow_category_limit_admin,dealflow.category.limit.admin,model_dealflow_category_limit,group_dealflow_admin,1,1,1,1
