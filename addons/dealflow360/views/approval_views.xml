@@ -55,8 +55,18 @@
                         order.
                     </div>
                     <field name="step_ids" widget="dealflow_approval_stepper" nolabel="1"/>
-                    <field name="step_ids">
-                        <tree editable="bottom" create="0" delete="0">
+                    <!-- Deliberately NOT editable="bottom". A step's role,
+                         decision, decider and stated reason are the audit
+                         record of a decision, not a form to be corrected
+                         afterwards - the model now refuses those writes
+                         outright (see GUARDED_STEP_FIELDS in
+                         models/approval.py), so an inline-editable tree could
+                         only ever hand the user an error. Decisions are made
+                         with the Approve / Reject / Request Revision buttons
+                         in the state column, which call the model methods
+                         directly and are unaffected. -->
+                    <field name="step_ids" readonly="1">
+                        <tree create="0" delete="0" edit="0">
                             <field name="sequence" invisible="1"/>
                             <field name="role"/>
                             <field name="approver_id" string="Decided by"/>

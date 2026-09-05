@@ -6,6 +6,27 @@ ROLE_GROUP_XMLID = {
     "finance": "dealflow360.group_dealflow_finance",
 }
 
+# Fields that ARE the approval decision. Nobody writes these directly - not a
+# Sales Manager, not Finance, not Admin, not dev mode. They are only ever
+# written by the action_* / _advance / _reject / _supersede engine methods,
+# which announce themselves with the context flag below AFTER checking that
+# the acting user really holds the step's role.
+#
+# Before this, role enforcement lived only inside _check_actionable(), which a
+# plain ORM write never reaches. Reproduced live: a Sales Manager wrote
+# state='approved' onto FINANCE's step and onto the chain, and the order
+# confirmed - the two-tier chain the problem statement asks for collapsed into
+# one signature. The ACLs (ir.model.access.csv) now also withhold write and
+# create from both approver roles, so this guard is the second layer, not the
+# only one.
+DECISION_CONTEXT = "dealflow_engine"
+GUARDED_APPROVAL_FIELDS = frozenset(
+    {"state", "risk_score", "risk_level", "order_fingerprint", "order_id"}
+)
+GUARDED_STEP_FIELDS = frozenset(
+    {"state", "approver_id", "acted_on", "reason", "role", "sequence", "approval_id"}
+)
+
 
 class DealflowApproval(models.Model):
     _name = "dealflow.approval"
@@ -68,6 +89,45 @@ class DealflowApproval(models.Model):
                 lambda s: s.state == "pending"
             )[:1]
 
+    def _df_engine(self):
+        """The only recordset allowed to write a decision field.
+
+        sudo() because routing and advancing a chain is done BY THE SYSTEM in
+        response to a rep's Confirm or an approver's button, not authored by
+        that user - and the ACLs deliberately give neither of them write on
+        this model. Same reasoning, and same shape, as audit_log._log().
+        """
+        return self.sudo().with_context(**{DECISION_CONTEXT: True})
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        # Without this, the write guard below is trivially sidestepped: a
+        # Sales Manager with create rights could author a chain that arrives
+        # already state='approved', steps already approved, fingerprint copied
+        # off the order - and _df_covers() would rightly accept it.
+        if not self.env.context.get(DECISION_CONTEXT):
+            raise UserError(
+                _(
+                    "Approval chains are raised automatically when a quotation "
+                    "goes past its discount limit. They cannot be created by "
+                    "hand."
+                )
+            )
+        return super().create(vals_list)
+
+    def write(self, vals):
+        guarded = GUARDED_APPROVAL_FIELDS & set(vals)
+        if guarded and not self.env.context.get(DECISION_CONTEXT):
+            raise UserError(
+                _(
+                    "An approval decision can only be recorded with the "
+                    "Approve, Reject or Request Revision buttons - it cannot "
+                    "be edited directly (attempted: %s)."
+                )
+                % ", ".join(sorted(guarded))
+            )
+        return super().write(vals)
+
     @api.model
     def _create_for_order(self, order):
         """DEC-003/DEC-010 routing: MEDIUM -> Sales Manager only; HIGH ->
@@ -82,15 +142,16 @@ class DealflowApproval(models.Model):
             if order.df_risk_level == "medium"
             else ["sales_manager", "finance"]
         )
-        # sudo(): routing is performed BY THE SYSTEM in response to the rep's
-        # Confirm, not authored by the rep. ir.model.access.csv deliberately
-        # withholds create on this model from Sales Rep and Finance so nobody
-        # can hand-craft an approval chain - but without sudo() here that same
-        # ACL also blocked the automatic routing AT-04 requires, so a rep
-        # confirming their own over-ceiling quotation got an AccessError
-        # instead of an approval. Same reasoning, and same fix, as
-        # dealflow.audit.log._log().
-        approval = self.sudo().create(
+        # _df_engine(): routing is performed BY THE SYSTEM in response to the
+        # rep's Confirm, not authored by the rep. ir.model.access.csv
+        # deliberately withholds create on this model from every non-admin
+        # role so nobody can hand-craft an approval chain, and create() above
+        # withholds it from admin too - but without the engine recordset here
+        # that same protection would also block the automatic routing AT-04
+        # requires, so a rep confirming their own over-ceiling quotation would
+        # get an error instead of an approval. Same reasoning, and same fix,
+        # as dealflow.audit.log._log().
+        approval = self._df_engine().create(
             {
                 "order_id": order.id,
                 "risk_score": order.df_blended_risk_score,
@@ -131,17 +192,19 @@ class DealflowApproval(models.Model):
         self.ensure_one()
         remaining = self.step_ids.filtered(lambda s: s.state == "waiting").sorted("sequence")
         if remaining:
-            remaining[0].write({"state": "pending", "pending_since": fields.Datetime.now()})
+            remaining[0]._df_engine().write(
+                {"state": "pending", "pending_since": fields.Datetime.now()}
+            )
         else:
-            self.state = "approved"
+            self._df_engine().write({"state": "approved"})
 
     def _reject(self):
         self.ensure_one()
-        self.state = "rejected"
+        self._df_engine().write({"state": "rejected"})
 
     def _request_revision(self):
         self.ensure_one()
-        self.state = "revision"
+        self._df_engine().write({"state": "revision"})
 
     def _df_covers(self, order):
         """Whether this chain actually authorises `order` to confirm RIGHT NOW.
@@ -180,10 +243,10 @@ class DealflowApproval(models.Model):
         self.ensure_one()
         if self.state not in ("pending", "approved"):
             return False
-        self.sudo().write({"state": "superseded"})
+        self._df_engine().write({"state": "superseded"})
         self.step_ids.filtered(
             lambda s: s.state in ("waiting", "pending")
-        ).sudo().write({"state": "superseded"})
+        )._df_engine().write({"state": "superseded"})
         return True
 
 
@@ -230,6 +293,39 @@ class DealflowApprovalStep(models.Model):
         "actually made finance's step actionable.",
     )
 
+    def _df_engine(self):
+        """See DealflowApproval._df_engine - identical contract."""
+        return self.sudo().with_context(**{DECISION_CONTEXT: True})
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        # Steps are only ever born as part of a chain, through the (0, 0, ...)
+        # commands in _create_for_order - which runs inside the engine context,
+        # and Odoo propagates that context to the child create. A step created
+        # any other way would let someone bolt an already-'approved' row onto a
+        # live chain.
+        if not self.env.context.get(DECISION_CONTEXT):
+            raise UserError(
+                _(
+                    "Approval steps are generated with the chain they belong "
+                    "to. They cannot be created by hand."
+                )
+            )
+        return super().create(vals_list)
+
+    def write(self, vals):
+        guarded = GUARDED_STEP_FIELDS & set(vals)
+        if guarded and not self.env.context.get(DECISION_CONTEXT):
+            raise UserError(
+                _(
+                    "An approval decision can only be recorded with the "
+                    "Approve, Reject or Request Revision buttons - it cannot "
+                    "be edited directly (attempted: %s)."
+                )
+                % ", ".join(sorted(guarded))
+            )
+        return super().write(vals)
+
     def _role_label(self):
         return dict(self._fields["role"].selection)[self.role]
 
@@ -245,7 +341,10 @@ class DealflowApprovalStep(models.Model):
     def action_approve(self, reason=False):
         self.ensure_one()
         self._check_actionable()
-        self.write(
+        # _df_engine() only AFTER _check_actionable() has confirmed this user
+        # really holds this step's role - the guard exists to stop writes that
+        # skip that check, never to skip it here.
+        self._df_engine().write(
             {
                 "state": "approved",
                 "approver_id": self.env.user.id,
@@ -271,7 +370,7 @@ class DealflowApprovalStep(models.Model):
         self._check_actionable()
         if not reason:
             raise UserError(_("A reason is required to reject an approval."))
-        self.write(
+        self._df_engine().write(
             {
                 "state": "rejected",
                 "approver_id": self.env.user.id,
@@ -293,7 +392,7 @@ class DealflowApprovalStep(models.Model):
         self._check_actionable()
         if not reason:
             raise UserError(_("A reason is required to request a revision."))
-        self.write(
+        self._df_engine().write(
             {
                 "state": "revision",
                 "approver_id": self.env.user.id,

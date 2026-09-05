@@ -167,7 +167,11 @@ class TestApprovalBinding(TransactionCase):
         approval = order.df_approval_id
         self.assertEqual(approval.risk_level, "high")
 
-        approval.sudo().write({"state": "approved"})
+        # _df_engine() rather than sudo(): the decision fields are guarded
+        # against direct writes now (see test_approval_authority), so this is
+        # how a test deliberately manufactures the corrupt state that
+        # _df_covers() has to reject.
+        approval._df_engine().write({"state": "approved"})
         self.assertTrue(
             approval.step_ids.filtered(lambda s: s.state != "approved"),
             "precondition: at least one step is still unwalked",
@@ -188,5 +192,5 @@ class TestApprovalBinding(TransactionCase):
         order.action_confirm()
         approval = order.df_approval_id
         self._walk_chain(approval)
-        approval.sudo().write({"order_fingerprint": False})
+        approval._df_engine().write({"order_fingerprint": False})
         self.assertFalse(approval._df_covers(order))
