@@ -308,4 +308,9 @@ wrong count is not, and that is what caught the corruption:
 | `df.manager` / `df.finance` / `df.admin` | **4** |
 
 Plus: 1 warehouse split · 2 approval chains · 2 posted invoices ·
+**3 curated upsell rules** ·
 **S00016 must be `draft`, Acme Corp, total 34,164.00, risk 100.**
+
+Stray orders with no `origin` are usually harmless exploration (someone
+logged in and clicked *New Quotation*). Delete them — but always check
+S00016 itself, because that is the record that matters.
