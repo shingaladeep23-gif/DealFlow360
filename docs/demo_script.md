@@ -88,6 +88,18 @@ approval cycle completes. **S00016 is the deal to drive live.**
 7. Press **Confirm** again — **it now succeeds**: order state `sale`,
    pipeline stage `confirmed`.
 
+8. **Fulfillment happens automatically.** Confirming the approved deal
+   creates a real warehouse split — for the demo deal, **2 shipments plus a
+   backorder** — allocated from actual `stock.quant`. Open
+   **DealFlow360 › Fulfillment** to show it. See §3b for the allocation
+   detail.
+
+> **Full rehearsal, run on a throwaway clone of S00016 so the live deal
+> stays pristine:** risk 100 → confirm blocked → `pending_approval` with a
+> 2-step chain → both steps approved → confirm succeeds (`state=sale`) →
+> warehouse split auto-created with 2 shipments and a backorder. Every step
+> above is therefore known-good on the exact record type you will demo.
+
 **Role enforcement is real:** attempting to approve as a user who is not a
 Sales Manager raises
 `UserError: Only a Sales Manager may act on this approval step.`
