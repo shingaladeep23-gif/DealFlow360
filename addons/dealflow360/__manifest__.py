@@ -36,11 +36,14 @@ and deal health monitoring — built on native Odoo 17 Community models.
         "views/dealflow_menus.xml",
         "views/sale_order_kanban_views.xml",
         "views/portal_templates.xml",
+        "views/invoice_views.xml",
     ],
     "assets": {
         "web.assets_backend": [
             "dealflow360/static/src/fields/risk_gauge/risk_gauge.js",
             "dealflow360/static/src/fields/risk_gauge/risk_gauge.xml",
+            "dealflow360/static/src/fields/invoice_stepper/invoice_stepper.js",
+            "dealflow360/static/src/fields/invoice_stepper/invoice_stepper.xml",
             "dealflow360/static/src/scss/dealflow.scss",
         ],
     },

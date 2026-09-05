@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="dealflow360.InvoiceStepper">
+        <div class="o_df_stepper" t-att-class="steps[0].cancelled ? 'o_df_stepper_cancelled' : ''">
+            <t t-foreach="steps" t-as="step" t-key="step.label">
+                <div class="o_df_stepper_step" t-att-class="step.done ? 'o_df_stepper_done' : ''">
+                    <span class="o_df_stepper_dot"/>
+                    <span class="o_df_stepper_label" t-esc="step.label"/>
+                </div>
+                <div t-if="!step_last" class="o_df_stepper_connector" t-att-class="step.done ? 'o_df_stepper_done' : ''"/>
+            </t>
+        </div>
+    </t>
+</templates>

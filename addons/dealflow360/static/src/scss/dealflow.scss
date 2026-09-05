@@ -53,6 +53,47 @@
     color: #7a5c00;
 }
 
+.o_df_invoice_stepper_wrap {
+    padding: 12px 24px 0;
+}
+
+.o_df_stepper {
+    display: flex;
+    align-items: center;
+    max-width: 420px;
+
+    .o_df_stepper_step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .o_df_stepper_dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background-color: #ced4da;
+        display: inline-block;
+    }
+    .o_df_stepper_connector {
+        flex: 1;
+        height: 2px;
+        background-color: #ced4da;
+        margin: 0 4px 18px;
+    }
+    .o_df_stepper_done {
+        color: #1e7e34;
+        .o_df_stepper_dot, &.o_df_stepper_connector {
+            background-color: #28a745;
+        }
+    }
+    &.o_df_stepper_cancelled .o_df_stepper_dot {
+        background-color: #dc3545;
+    }
+}
+
 .o_df_placeholder_panel {
     background-color: #f8f9fa;
     border: 1px dashed #ced4da;
