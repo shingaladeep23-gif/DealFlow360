@@ -68,5 +68,48 @@
             <field name="perm_create">0</field>
             <field name="perm_unlink">0</field>
         </record>
+
+        <!-- DEC-018 (amends DEC-012). Live-verified bug: `sale`'s own portal
+             rules ("Portal Personal Quotations/Sales Orders" on sale.order,
+             "Portal Sales Orders Line" on sale.order.line) are FOLLOWER-based
+             (message_partner_ids), scoped to the portal GROUP. Group rules OR
+             together, but the combined group-term is still ANDed against our
+             GLOBAL partner_id rule above - so a quotation the customer is not
+             yet a chatter follower of (i.e. every quotation created via plain
+             ORM create(), never explicitly "sent") was unreadable even to its
+             own owner. Not a security hole (cross-customer access still fails
+             every test - see test_portal_isolation.py); it silently broke the
+             portal for every legitimate customer.
+
+             Fix: add our OWN partner_id-based rule to the SAME portal group,
+             not global. Combination becomes:
+                 (our global partner rule)
+                 AND (native follower rule OR this new partner rule)
+             which reduces to exactly "our global partner rule" (A AND (B OR A)
+             == A) - this cannot widen access beyond what the global rule
+             already allows, it only stops the narrower native rule from being
+             the sole (and wrong) gate. Never modifies/replaces the native
+             rule (DEC-012 still rejects that), only adds alongside it. -->
+        <record id="rule_dealflow_portal_sale_order_own_group" model="ir.rule">
+            <field name="name">DealFlow360: portal group companion so the native follower-based rule can't block real owners</field>
+            <field name="model_id" ref="sale.model_sale_order"/>
+            <field name="domain_force">[('partner_id', 'child_of', [user.commercial_partner_id.id])]</field>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="perm_read">1</field>
+            <field name="perm_write">0</field>
+            <field name="perm_create">0</field>
+            <field name="perm_unlink">0</field>
+        </record>
+
+        <record id="rule_dealflow_portal_sale_order_line_own_group" model="ir.rule">
+            <field name="name">DealFlow360: portal group companion for sale.order.line (same reasoning)</field>
+            <field name="model_id" ref="sale.model_sale_order_line"/>
+            <field name="domain_force">[('order_id.partner_id', 'child_of', [user.commercial_partner_id.id])]</field>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="perm_read">1</field>
+            <field name="perm_write">0</field>
+            <field name="perm_create">0</field>
+            <field name="perm_unlink">0</field>
+        </record>
     </data>
 </odoo>

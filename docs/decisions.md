@@ -256,3 +256,17 @@ Buckets: **≥80 Healthy · 50–79 At Risk · <50 Critical**
 - **Decision:** `dealflow.negotiation.counter_discount` is one float percentage, written to every non-section/note line's `discount` field via a normal `write()` — never a per-line negotiation.
 - **Reason:** architecture.md's data-model table gives `dealflow.negotiation` a single `counter_discount` field (not a one-to-many over lines), and the brief's negotiation flow (AT-08/AT-09) describes one customer-proposed discount per quotation. Writing through the native `discount` field means Atlas's existing DF-002/DF-003 compute chain (ceiling, excess, blended risk) recomputes automatically — this decision deliberately does not reimplement or duplicate that math anywhere in the portal layer.
 - **Status:** Accepted — binding on DF-014. If per-line counter-offers are wanted later, that is a new field/UX on top of this model, not a replacement.
+
+---
+
+## DEC-018 — Amends DEC-012: a portal-group companion rule is required alongside the global rule
+
+- **Date:** 2026-09-05
+- **Decision:** Add `rule_dealflow_portal_sale_order_own_group` / `..._line_own_group` — the same `partner_id` domain as DEC-012's global rule, but scoped to `base.group_portal` (not global) — as companions to that global rule. Never modify or remove the native `sale` module rules.
+- **Reason:** Live-verified in `tests/test_portal_isolation.py` under the real Odoo test runner: `sale`'s own portal rules (`sale_order_rule_portal`, `sale_order_line_rule_portal`, both in `odoo/addons/sale/security/ir_rules.xml`) are **follower-based** (`message_partner_ids child_of ...`), scoped to the portal *group*. Since group rules OR together but the resulting OR-set is still ANDed against DEC-012's global rule, a quotation whose customer was never added as a chatter follower (i.e. anything created via plain `create()` and never explicitly "sent") was unreadable **even to its own owner** — `test_portal_user_can_read_own_order` raised `AccessError` and `test_portal_user_search_excludes_other_customer` came back empty. Every cross-customer denial test still passed (no security regression), but the portal was a dead end for every legitimate customer.
+
+  Adding our own rule to the *same* portal group changes the group-term from `(follower_domain)` to `(follower_domain OR partner_domain)`. Combined with the unchanged global rule: `partner_domain AND (follower_domain OR partner_domain)` reduces to exactly `partner_domain` (`A AND (B OR A) == A`) — provably no wider than the global rule already allows, it only stops the native rule's narrower OR-branch from being the sole gate.
+- **Alternatives considered:**
+  - *Make quotations auto-follow their customer on creation* — rejected for this pass: would require editing `sale_order.py` (Atlas's file under the concurrency lane rule) and conflates "who gets emailed" with "who has read access," which is exactly the coupling DEC-007/012 rejected in the first place.
+  - *Modify/replace the native rule* — rejected, same reasoning as DEC-012.
+- **Status:** Accepted — binding on DF-014/DF-016.
