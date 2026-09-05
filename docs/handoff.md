@@ -6,6 +6,41 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-000b — Resumption audit: repository state vs. previous-team claims — Michael — 2026-09-05
+
+**Completed work**
+- Re-cloned `main` at `92993e8` and audited the actual code against the inherited summaries. Findings are recorded claim-by-claim in `docs/task_plan.md` -> *Current state*; the short version is that **both QA bugs Pam found are still live in the code** — only their decision records were committed.
+- Reconciled `docs/task_plan.md`, whose status block was stale (it listed DF-003 as not started although the risk engine is committed).
+- Set the repo-local git identity to `shingaladeep23-gif <shingaladeep23@gmail.com>`, matching every existing commit. A fresh clone otherwise inherits a different global identity, which would have broken the account rule on the first push.
+
+**Important files**
+- `docs/task_plan.md` — the verification table; read it before trusting any older status text.
+- `addons/dealflow360/models/sale_order_line.py:31-48` — `_df_reference_price`, still on the broken pre-17 API.
+- `addons/dealflow360/models/sale_order.py:90-145` — `_compute_df_risk`, the committed DEC-003 engine.
+
+**Current state**
+- DF-001, DF-001e and DF-002 land as described. DF-003's engine is committed but untested and unproven live.
+- DEC-014 and DEC-015 are **documented but not implemented**.
+
+**Dependencies**
+- The Docker daemon is now running (`29.5.2`) — the constraint that blocked every previous live-verification attempt. The `odoo:17` + `postgres:15` stack has still never been started; no DealFlow containers exist.
+
+**Known issues**
+- `product.with_context(pricelist=...).price` in `_df_reference_price` raises `AttributeError` on Odoo 17, so a quotation line under a pricelist cannot be saved. Demo-stopping, and currently on `main`.
+- `dealflow.category.limit` still shadows `product.category.df_max_discount`; the admin-facing Category Limits screen still has no effect on quotation behaviour.
+- The `gh` CLI holds an invalid keyring token. Irrelevant to the work — use plain `git`, whose osxkeychain credentials are valid.
+
+**Remaining work**
+- DF-003b (next), DF-003c, DF-004, then Phases 4-9.
+
+**Recommended next task**
+- **DF-003b (Atlas)** — start the stack, fix DEC-015 at the root, add the missing risk tests, and produce the project's first live verification.
+
+**Tests performed**
+- `git log`, `git status`, full file-tree inspection, and targeted greps for every field and model named in the resumption brief. No code was executed and nothing was installed — this entry reports only what was read.
+
+---
+
 ## DF-001e — Security cleanup from Pam's DF-001d smoke test — Atlas — 2026-09-05
 
 **Completed work**
