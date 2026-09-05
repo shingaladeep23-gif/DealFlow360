@@ -21,31 +21,3 @@ class DealflowDiscountTier(models.Model):
             "Max discount must be between 0 and 100.",
         ),
     ]
-
-
-class DealflowCategoryLimit(models.Model):
-    _name = "dealflow.category.limit"
-    _description = "Product Category Discount Limit"
-    _order = "max_discount"
-
-    category_id = fields.Many2one(
-        "product.category", required=True, ondelete="cascade"
-    )
-    max_discount = fields.Float(
-        string="Max Discount (%)",
-        required=True,
-        help="Discount ceiling for products in this category, regardless of customer tier.",
-    )
-
-    _sql_constraints = [
-        (
-            "category_unique",
-            "UNIQUE(category_id)",
-            "A discount limit already exists for this category.",
-        ),
-        (
-            "max_discount_range",
-            "CHECK(max_discount >= 0 AND max_discount <= 100)",
-            "Max discount must be between 0 and 100.",
-        ),
-    ]

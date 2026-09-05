@@ -16,10 +16,12 @@ class TestDiscountTierFoundation(TransactionCase):
         self.assertEqual(tiers.get("Gold"), 15.0)
 
     def test_seeded_category_limits(self):
-        limits = {
-            limit.category_id.name: limit.max_discount
-            for limit in self.env["dealflow.category.limit"].search([])
-        }
+        """DEC-014: product.category.df_max_discount is the sole source of
+        truth - no separate dealflow.category.limit model exists anymore."""
+        categories = self.env["product.category"].search(
+            [("name", "in", ("Hardware", "Services"))]
+        )
+        limits = {categ.name: categ.df_max_discount for categ in categories}
         self.assertEqual(limits.get("Hardware"), 15.0)
         self.assertEqual(limits.get("Services"), 10.0)
 

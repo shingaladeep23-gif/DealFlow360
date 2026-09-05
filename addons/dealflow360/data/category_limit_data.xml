@@ -11,14 +11,5 @@
             <field name="parent_id" ref="product.product_category_all"/>
             <field name="df_max_discount">10.0</field>
         </record>
-
-        <record id="category_limit_hardware" model="dealflow.category.limit">
-            <field name="category_id" ref="product_category_hardware"/>
-            <field name="max_discount">15.0</field>
-        </record>
-        <record id="category_limit_services" model="dealflow.category.limit">
-            <field name="category_id" ref="product_category_services"/>
-            <field name="max_discount">10.0</field>
-        </record>
     </data>
 </odoo>

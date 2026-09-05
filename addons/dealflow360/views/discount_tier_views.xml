@@ -43,27 +43,29 @@
         <field name="view_mode">tree,form</field>
     </record>
 
-    <!-- dealflow.category.limit -->
+    <!-- Category Limits (DEC-014): product.category.df_max_discount is the sole
+         source of truth - this is a tree/form view over product.category
+         itself, not a separate model, so there is nothing left to desync. -->
     <record id="view_dealflow_category_limit_tree" model="ir.ui.view">
         <field name="name">dealflow.category.limit.tree</field>
-        <field name="model">dealflow.category.limit</field>
+        <field name="model">product.category</field>
         <field name="arch" type="xml">
-            <tree>
-                <field name="category_id"/>
-                <field name="max_discount"/>
+            <tree editable="bottom">
+                <field name="complete_name" string="Category"/>
+                <field name="df_max_discount"/>
             </tree>
         </field>
     </record>
 
     <record id="view_dealflow_category_limit_form" model="ir.ui.view">
         <field name="name">dealflow.category.limit.form</field>
-        <field name="model">dealflow.category.limit</field>
+        <field name="model">product.category</field>
         <field name="arch" type="xml">
             <form>
                 <sheet>
                     <group>
-                        <field name="category_id"/>
-                        <field name="max_discount"/>
+                        <field name="complete_name" string="Category" readonly="1"/>
+                        <field name="df_max_discount"/>
                     </group>
                 </sheet>
             </form>
@@ -72,7 +74,10 @@
 
     <record id="action_dealflow_category_limit" model="ir.actions.act_window">
         <field name="name">Category Limits</field>
-        <field name="res_model">dealflow.category.limit</field>
+        <field name="res_model">product.category</field>
         <field name="view_mode">tree,form</field>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'tree', 'view_id': ref('view_dealflow_category_limit_tree')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('view_dealflow_category_limit_form')})]"/>
     </record>
 </odoo>

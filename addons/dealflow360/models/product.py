@@ -7,7 +7,7 @@ class ProductCategory(models.Model):
     df_max_discount = fields.Float(
         string="Max Discount (%)",
         help="Discount ceiling for products in this category, regardless of "
-        "customer tier. Mirrored onto dealflow.category.limit.",
+        "customer tier (DEC-014: sole source of truth, no shadow model).",
     )
 
 
