@@ -6,6 +6,57 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-003b — Stack up, DEC-015 fixed at the root, real risk tests, first live verification — Atlas — 2026-09-05
+
+**Completed work**
+- **Docker stack, cold first start.** The Docker daemon came up mid-project; no DealFlow containers had ever existed. `docker compose up -d` pulled `odoo:17` + `postgres:15` fresh and started `dealflow360-db-1` / `dealflow360-odoo-1`. No compose/config file changes were needed — `docker-compose.yml` and `odoo.conf` were already correct, just never run.
+- **DEC-015 fixed at the root** (`addons/dealflow360/models/sale_order_line.py:41-48`, `_df_reference_price`). Replaced `product.with_context(pricelist=...).price` (no such attribute on Odoo 17 — confirmed) with `pricelist._get_product_price(self.product_id, self.product_uom_qty or 1.0, uom=self.product_uom or self.product_id.uom_id, date=self.order_id.date_order)`. Per the task's own instruction not to code from memory, I grepped the **installed** container source before writing this: `/usr/lib/python3/dist-packages/odoo/addons/product/models/product_pricelist.py` inside `dealflow360-odoo-1`. Confirmed signature: `_get_product_price(self, product, *args, **kwargs)` forwards to `_compute_price_rule(self, products, quantity, currency=None, uom=None, date=False, compute_price=True, **kwargs)`. DEC-015's prescribed API was exactly right; only the code implementing it was still broken.
+- **New tests**, `addons/dealflow360/tests/test_risk_engine.py` (registered in `tests/__init__.py`), 7 tests — the first coverage of any `df_*risk*` field:
+  - `test_worked_example_scores_exactly_40_and_routes_medium` — reproduces DEC-003's own worked example (Gold customer; Hardware line list_price 1000 @ 12% given/15% allowed; Services line list_price 500 @ 18% given/10% allowed) and asserts the score is **exactly** 40.0 and routes MEDIUM.
+  - `test_risk_weighting_uses_pre_discount_reference_value` — same pair; independently computes what the score *would* be under post-discount weighting (~39.26, matching the warning comment in `sale_order.py`) and asserts the real engine's answer is the pre-discount one (40.0), not that.
+  - `test_risk_score_caps_at_100` — a zero-ceiling test category + 90% discount pushes the raw formula to 810; asserts the stored value clips at exactly 100.0.
+  - `test_risk_level_none_when_every_line_within_ceiling` — discount exactly at the ceiling → score 0.0, level `none`, no summary.
+  - `test_risk_level_boundary_against_configurable_threshold` — sets `dealflow.risk_high_min` to a **non-default** 27 via `ir.config_parameter`, and proves score==27 stays MEDIUM while score==36 (after a `write()` on the same line, re-read) flips to HIGH — this is the DEC-010 configurability itself under test, not just the default-40 boundary.
+  - `test_reference_price_without_pricelist_uses_list_price` / `test_reference_price_with_pricelist_is_not_double_counted` — pricelist reference pricing in **both directions**. The pricelist test creates a real `product.pricelist` with a 10%-global percentage item, asserts Odoo actually priced the line at 900 (not just that the formula compiles), asserts zero excess at zero extra rep discount (proving DEC-009's no-double-count rule against a **real** pricelist record — exactly the case DEC-015 said was previously unsaveable), then asserts a further 20% rep discount on top of that pricelist price yields 5 excess points against the 15% ceiling.
+- **First real live verification of the project.** Ran `docker compose exec odoo odoo -d dealflow360 -u dealflow360 --test-enable --stop-after-init` twice (once right after my changes, once again after pulling Kevin's concurrent DF-005b/c UI push to confirm nothing regressed). Actual result line both times: **`0 failed, 0 error(s) of 19 tests when loading database 'dealflow360'`** (4 discount-tier + 8 governance + 7 new risk-engine). Module also installs cleanly from scratch: `-i dealflow360 --stop-after-init` loaded 60 modules, 0 errors.
+
+**Important files**
+- `addons/dealflow360/models/sale_order_line.py` — the DEC-015 fix.
+- `addons/dealflow360/tests/test_risk_engine.py` — new.
+- `addons/dealflow360/tests/__init__.py` — registers it.
+
+**Current state**
+- The stack is up and left running (`docker compose ps` shows both containers `Up`). Module `dealflow360` is installed in the `dealflow360` database with demo data seeded via `post_init_hook`.
+- Exact commands for the next agent:
+  ```bash
+  docker compose up -d
+  docker compose exec odoo odoo -d dealflow360 -u dealflow360 --stop-after-init          # upgrade after code changes
+  docker compose exec odoo odoo -d dealflow360 -u dealflow360 --test-enable --stop-after-init   # run the full suite
+  docker compose logs -f odoo                                                             # server logs
+  ```
+- Mid-task, the human changed the required commit identity from `shingaladeep23-gif` to `Jeel1210 <jeel.aghera@gmail.com>` (see `807ef7f`, `CLAUDE.md` §2/2c/2d). I verified this was a deliberate, documented change (not a stray `git config --global` from another agent) before committing under it — everything in this entry is pushed as `Jeel1210`.
+- Concurrent working is now live: Kevin pushed DF-005b/c (risk gauge, quotation kanban) to `main` while this task was running with zero conflicts, since we stayed in our separate lanes (models/tests vs. views/static).
+
+**Dependencies**
+- None blocking. DF-004 (approval chain) can now start for real — DF-003's risk engine is tested and live-verified, so approval routing has a trustworthy signal to key off.
+
+**Known issues**
+- DEC-014 (`dealflow.category.limit` still shadows `product.category.df_max_discount`) is still live — explicitly out of scope for this task (DF-003c), untouched here.
+- A harmless `OSError: [Errno 98] Address already in use` prints on stderr from a background `httpd` thread every time you run a one-off `odoo` exec while the main container's own `entrypoint.sh` is already bound to :8069. Cosmetic — it does not affect test execution or exit codes; both are separate processes inside the same container racing for the same port, and only one needs it.
+
+**Remaining work**
+- DF-003c (DEC-014 removal — `dealflow.category.limit` cleanup), then DF-004 (approval chain: `dealflow.approval` model, Sales Manager → Finance routing keyed off `df_risk_level`, audit trail).
+
+**Recommended next task**
+- DF-003c (Atlas), then DF-004 (Atlas).
+
+**Tests performed**
+- `docker compose exec odoo odoo -d dealflow360 -i dealflow360 --stop-after-init` — clean install, 60 modules, 0 errors.
+- `docker compose exec odoo odoo -d dealflow360 -u dealflow360 --test-enable --stop-after-init` — **0 failed, 0 error(s) of 19 tests** (real Odoo test runner, run twice, including once after Kevin's concurrent UI push).
+- Manually confirmed via `docker compose exec db psql` that the `dealflow360` module row was `uninstalled` before the first install and that the test run above was against the genuinely upgraded module.
+
+---
+
 ## DF-000b — Resumption audit: repository state vs. previous-team claims — Michael — 2026-09-05
 
 **Completed work**
