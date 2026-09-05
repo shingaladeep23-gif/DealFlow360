@@ -54,8 +54,16 @@
 
     <record id="action_dealflow_quotations" model="ir.actions.act_window">
         <field name="view_mode">kanban,tree,form</field>
-        <field name="views" eval="[(ref('view_order_kanban_dealflow'), 'kanban'),
-                                    (False, 'tree'),
-                                    (False, 'form')]"/>
+        <!-- "views" is a compute-only field with no inverse on this Odoo
+             build (ir.actions.act_window._compute_views) - an eval write to
+             it silently no-ops, which is why this pipeline kanban was never
+             actually reaching the Quotations menu (verified live: role
+             cross-check found admin/manager/finance/rep all falling back to
+             the plain default sale.order kanban, ungrouped, no risk color,
+             no margin). view_ids is the real stored field. -->
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'sequence': 1, 'view_mode': 'kanban', 'view_id': ref('view_order_kanban_dealflow')}),
+            (0, 0, {'sequence': 2, 'view_mode': 'tree'}),
+            (0, 0, {'sequence': 3, 'view_mode': 'form'})]"/>
     </record>
 </odoo>
