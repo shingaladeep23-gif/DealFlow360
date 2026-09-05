@@ -37,5 +37,36 @@
             <field name="implied_ids" eval="[(4, ref('group_dealflow_sales_manager')), (4, ref('group_dealflow_finance'))]"/>
             <field name="comment">Configures tiers, category limits, warehouses and subscription plans.</field>
         </record>
+
+        <!-- DEC-012: GLOBAL rule (no groups_id) - group rules OR together in
+             Odoo, so a rule scoped to the portal group would widen access
+             instead of narrowing it. Only a global rule genuinely restricts.
+             Ownership-based (partner_id / commercial partner + children), not
+             follower-based - deliberately not reusing Odoo's native
+             follower-scoped "Portal Personal Sales Orders" rule (DEC-007). -->
+        <record id="rule_dealflow_portal_sale_order_own" model="ir.rule">
+            <field name="name">DealFlow360: portal users see only their own quotations</field>
+            <field name="model_id" ref="sale.model_sale_order"/>
+            <field name="domain_force">[('partner_id', 'child_of', [user.commercial_partner_id.id])]</field>
+            <field name="perm_read">1</field>
+            <field name="perm_write">0</field>
+            <field name="perm_create">0</field>
+            <field name="perm_unlink">0</field>
+        </record>
+
+        <!-- Portal users never write sale.order/dealflow.negotiation directly
+             from the ORM - every mutation (counter-discount, confirm) is
+             mediated by controllers/portal.py, which validates the business
+             rule then writes via sudo(). perm_read=1 only: this rule's job is
+             to narrow which rows a read-only ORM access can see. -->
+        <record id="rule_dealflow_portal_negotiation_own" model="ir.rule">
+            <field name="name">DealFlow360: portal users see only their own negotiations</field>
+            <field name="model_id" ref="model_dealflow_negotiation"/>
+            <field name="domain_force">[('order_id.partner_id', 'child_of', [user.commercial_partner_id.id])]</field>
+            <field name="perm_read">1</field>
+            <field name="perm_write">0</field>
+            <field name="perm_create">0</field>
+            <field name="perm_unlink">0</field>
+        </record>
     </data>
 </odoo>

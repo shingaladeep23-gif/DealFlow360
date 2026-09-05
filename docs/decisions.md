@@ -237,3 +237,22 @@ Buckets: **≥80 Healthy · 50–79 At Risk · <50 Critical**
   DEC-009's *design* was never in question: comparing the rep's actual price against the pricelist-adjusted reference, so the pricelist's own reduction is never double-counted as rep discount, remains correct. This was a wrong-attribute-name defect inside a correct design.
 - **Process note:** Michael reviewed this code and passed it, reasoning about the formula while assuming the attribute access was valid. Pam grepped the installed core source instead and was right. **Verify API surface against the installed version, not from memory** — the formula being right is not evidence that the field exists.
 - **Status:** Accepted
+
+---
+
+## DEC-016 — `dealflow.negotiation` has no separate `.message` model; portal comments use native chatter
+
+- **Date:** 2026-09-05
+- **Decision:** `dealflow.negotiation` inherits `mail.thread` directly instead of pairing with a bespoke `dealflow.negotiation.message` model. Its `message_ids` is the native chatter field. Line-level comments/change requests (AT-08) post to the **quotation's own** chatter (`sale.order` already inherits `mail.thread`), with the target line named in the message body — no new comment model either.
+- **Reason:** architecture.md §3.2's data-model table lists `dealflow.negotiation` with a `message_ids` field and no separate message-model row — that field name only makes sense as Odoo's own chatter mechanism, not a hand-rolled one (`docs/ui_spec.md` screen 11 mentions a `.message` model in passing, but the authoritative data-model table does not; this decision reconciles the two in favor of the table plus reuse). Reusing `mail.thread` gives per-message author/timestamp, portal-safe rendering, and backend visibility (reps see the same thread on the order) for free, instead of a parallel messaging system with none of that.
+- **Alternatives considered:** *Custom `dealflow.negotiation.message` model* — rejected: duplicates `mail.message` for no capability gain and a second model to secure with its own record rule.
+- **Status:** Accepted — binding on DF-014/DF-016.
+
+---
+
+## DEC-017 — Counter-discount is a single flat percentage applied to every discountable line
+
+- **Date:** 2026-09-05
+- **Decision:** `dealflow.negotiation.counter_discount` is one float percentage, written to every non-section/note line's `discount` field via a normal `write()` — never a per-line negotiation.
+- **Reason:** architecture.md's data-model table gives `dealflow.negotiation` a single `counter_discount` field (not a one-to-many over lines), and the brief's negotiation flow (AT-08/AT-09) describes one customer-proposed discount per quotation. Writing through the native `discount` field means Atlas's existing DF-002/DF-003 compute chain (ceiling, excess, blended risk) recomputes automatically — this decision deliberately does not reimplement or duplicate that math anywhere in the portal layer.
+- **Status:** Accepted — binding on DF-014. If per-line counter-offers are wanted later, that is a new field/UX on top of this model, not a replacement.
