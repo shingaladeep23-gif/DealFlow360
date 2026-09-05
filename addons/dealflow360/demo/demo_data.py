@@ -79,6 +79,38 @@ def _create_products(env, categories):
     }
 
 
+def _create_upsell_rules(env, products):
+    """DF-008 curated pairings, so the demo shows both signals the
+    recommendation engine blends - not just the co-purchase history that
+    accumulates from confirmed orders. Real product references from the
+    seed data above, no invented data."""
+    Rule = env["dealflow.upsell.rule"]
+    Rule.create(
+        {
+            "product_id": products["probook"].product_variant_id.id,
+            "suggested_product_id": products["docking_station"].product_variant_id.id,
+            "score": 70.0,
+            "reason": "Frequently paired with laptops",
+        }
+    )
+    Rule.create(
+        {
+            "product_id": products["probook"].product_variant_id.id,
+            "suggested_product_id": products["setup_service"].product_variant_id.id,
+            "score": 60.0,
+            "reason": "Recommended onsite setup for new hardware",
+        }
+    )
+    Rule.create(
+        {
+            "product_id": products["docking_station"].product_variant_id.id,
+            "suggested_product_id": products["core_plan"].product_variant_id.id,
+            "score": 40.0,
+            "reason": "Customers on a support plan keep hardware covered",
+        }
+    )
+
+
 def _create_warehouses(env):
     Warehouse = env["stock.warehouse"]
     company = env.ref("base.main_company")
@@ -145,5 +177,6 @@ def post_init_hook(env):
 
     _create_partners(env, tiers)
     products = _create_products(env, categories)
+    _create_upsell_rules(env, products)
     warehouses = _create_warehouses(env)
     _seed_stock(env, products, warehouses)
