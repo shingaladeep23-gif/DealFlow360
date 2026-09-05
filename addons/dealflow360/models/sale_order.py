@@ -8,7 +8,7 @@ HEALTH_FLAG_CODES = ("stalled", "discount_anomaly", "approval_delay", "delivery_
 
 class DealflowHealthFlag(models.Model):
     _name = "dealflow.health.flag"
-    _description = "DealFlow360 Deal Health Signal (DEC-005/DEC-011)"
+    _description = "Deal Health Warning Sign"
 
     name = fields.Char(required=True)
     code = fields.Char(
@@ -37,6 +37,15 @@ class SaleOrder(models.Model):
         "dealflow.audit.log.",
     )
 
+    df_negotiation_ids = fields.One2many(
+        "dealflow.negotiation",
+        "order_id",
+        string="Customer Negotiations",
+        help="Counter-discounts the customer has proposed from the portal. "
+        "Defined here rather than on dealflow.negotiation so the pipeline "
+        "stage below can depend on it.",
+    )
+
     df_margin_pct = fields.Float(
         string="Margin (%)",
         compute="_compute_df_margin_pct",
@@ -47,18 +56,17 @@ class SaleOrder(models.Model):
     df_pipeline_stage = fields.Selection(
         [
             ("draft", "Draft"),
-            ("pending_approval", "Pending Approval"),
+            ("pending_approval", "Waiting for approval"),
             ("approved", "Approved"),
-            ("negotiation", "Negotiation"),
+            ("negotiation", "In negotiation"),
             ("confirmed", "Confirmed"),
         ],
-        string="Pipeline Stage",
+        string="Stage",
         compute="_compute_df_pipeline_stage",
         store=True,
-        help="Mockup screen 3's Kanban grouping, driven by native state plus "
-        "DF-004's df_approval_id.state. Negotiation is driven by "
-        "DF-014/015's portal negotiation model (see DEC-019 for why the "
-        "customer-facing portal status is computed separately).",
+        help="The Kanban column a quotation sits in, derived from native "
+        "state plus the approval chain plus portal negotiations. Never set "
+        "by hand.",
     )
 
     @api.depends(
@@ -79,8 +87,17 @@ class SaleOrder(models.Model):
                 (revenue - cost) / revenue * 100.0 if revenue else 0.0
             )
 
-    @api.depends("state", "df_approval_id.state")
+    @api.depends("state", "df_approval_id.state", "df_negotiation_ids.state")
     def _compute_df_pipeline_stage(self):
+        # Ordered most-actionable first. "In negotiation" ranks BELOW the two
+        # approval states on purpose: a counter-discount that pushed the deal
+        # back over the limit is already sitting in someone's approval queue,
+        # and that is the fact the pipeline board needs to surface.
+        #
+        # The negotiation branch is why df_negotiation_ids exists. Before it,
+        # nothing in the codebase ever assigned "negotiation", so the Kanban
+        # rendered a column that could never contain a card no matter what a
+        # customer did.
         for order in self:
             if order.state == "sale":
                 order.df_pipeline_stage = "confirmed"
@@ -88,11 +105,13 @@ class SaleOrder(models.Model):
                 order.df_pipeline_stage = "pending_approval"
             elif order.df_approval_id.state == "approved":
                 order.df_pipeline_stage = "approved"
+            elif order.df_negotiation_ids:
+                order.df_pipeline_stage = "negotiation"
             else:
                 order.df_pipeline_stage = "draft"
 
     df_blended_risk_score = fields.Float(
-        string="Blended Risk Score",
+        string="Discount Risk",
         compute="_compute_df_risk",
         store=True,
         help="DEC-003: min(100, 6*blended_excess + 3*max_excess), where "
@@ -103,8 +122,15 @@ class SaleOrder(models.Model):
         "_compute_df_risk for why.",
     )
     df_risk_level = fields.Selection(
-        [("none", "None"), ("medium", "Medium"), ("high", "High")],
-        string="Risk Level",
+        # The labels state the CONSEQUENCE rather than an abstract severity:
+        # a salesperson reading "Medium" has to look up what that costs them,
+        # whereas "Needs manager approval" is already the answer.
+        [
+            ("none", "Within limits"),
+            ("medium", "Needs manager approval"),
+            ("high", "Needs manager + finance"),
+        ],
+        string="Discount Status",
         compute="_compute_df_risk",
         store=True,
         help="NONE is structural (every line within its ceiling, i.e. "
@@ -113,7 +139,7 @@ class SaleOrder(models.Model):
         "(DEC-010), default 40.",
     )
     df_risk_summary = fields.Char(
-        string="Risk Summary",
+        string="Why this needs approval",
         compute="_compute_df_risk",
         store=True,
         help="Human-readable reason this order was flagged, naming the worst "
@@ -175,14 +201,16 @@ class SaleOrder(models.Model):
             else:
                 order.df_risk_level = "high" if score > threshold else "medium"
                 worst_line = max(lines, key=lambda l: l.df_excess_points)
+                # Shown verbatim on the quotation and approval screens, so it
+                # is written for a salesperson: no "blended", no "ceiling",
+                # no score arithmetic they did not ask for.
                 order.df_risk_summary = (
-                    "%s exceeds its %.1f%% discount ceiling by %.1f points "
-                    "(blended risk score %.1f)"
+                    "%s is discounted %.1f points past the %.1f%% limit for "
+                    "this customer."
                     % (
                         worst_line.product_id.display_name,
-                        worst_line.df_effective_ceiling,
                         worst_line.df_excess_points,
-                        score,
+                        worst_line.df_effective_ceiling,
                     )
                 )
 
@@ -294,7 +322,7 @@ class SaleOrder(models.Model):
     )
     df_health_status = fields.Selection(
         [("healthy", "Healthy"), ("at_risk", "At Risk"), ("critical", "Critical")],
-        string="Health Status",
+        string="Health",
         readonly=True,
         copy=False,
         help="Bucketed from df_health_score: >=80 Healthy, 50-79 At Risk, "
@@ -302,7 +330,7 @@ class SaleOrder(models.Model):
     )
     df_health_flags = fields.Many2many(
         "dealflow.health.flag",
-        string="Health Flags",
+        string="Warning Signs",
         readonly=True,
         copy=False,
         help="DEC-011: which of DEC-005's four signals are currently active "
@@ -310,7 +338,7 @@ class SaleOrder(models.Model):
         "re-deriving thresholds client-side.",
     )
     df_health_reason = fields.Text(
-        string="Health Issue",
+        string="What is wrong",
         readonly=True,
         copy=False,
         help="Human-readable detail for every currently active signal, "

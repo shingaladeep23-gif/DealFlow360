@@ -3,57 +3,60 @@
     <t t-name="dealflow360.Dashboard">
         <div class="o_df_dashboard">
             <div class="o_df_dashboard_header">
-                <h2>Sales Dashboard</h2>
+                <div>
+                    <h2>Sales</h2>
+                    <p class="o_df_screen_hint">Where your deals stand right now. Click any number to open that list.</p>
+                </div>
                 <div class="o_df_dashboard_actions">
-                    <button class="btn btn-primary" t-on-click="openNewQuotation">+ New Quotation</button>
-                    <button class="btn btn-secondary" t-on-click="() => this.openQuotations([['df_pipeline_stage', '=', 'pending_approval']])">
-                        View Approvals
-                    </button>
+                    <button class="btn btn-primary" t-on-click="openNewQuotation">New quotation</button>
                 </div>
             </div>
 
-            <div t-if="state.loading" class="o_df_placeholder_panel">Loading dashboard…</div>
+            <div t-if="state.loading" class="o_df_placeholder_panel">Loading…</div>
             <div t-else="" class="o_df_dashboard_cards">
                 <div class="o_df_stat_card" t-on-click="() => this.openQuotations([['state', 'in', ['draft', 'sent']]])">
-                    <div class="o_df_stat_label">Open Quotations</div>
+                    <div class="o_df_stat_label">Open quotations</div>
                     <div class="o_df_stat_value" t-esc="state.openQuotations"/>
+                    <div class="o_df_stat_hint">Not yet won or lost</div>
                 </div>
                 <div class="o_df_stat_card o_df_stat_card_warning" t-on-click="() => this.openQuotations([['df_pipeline_stage', '=', 'pending_approval']])">
-                    <div class="o_df_stat_label">Pending Approvals</div>
+                    <div class="o_df_stat_label">Waiting for approval</div>
                     <div class="o_df_stat_value" t-esc="state.pendingApprovals"/>
+                    <div class="o_df_stat_hint">Held up until someone signs off</div>
                 </div>
                 <div class="o_df_stat_card o_df_stat_card_danger" t-on-click="() => this.openQuotations([['df_risk_level', 'in', ['medium', 'high']]])">
-                    <div class="o_df_stat_label">At Risk Deals</div>
+                    <div class="o_df_stat_label">Over the discount limit</div>
                     <div class="o_df_stat_value" t-esc="state.atRiskDeals"/>
+                    <div class="o_df_stat_hint">Will need approval to confirm</div>
                 </div>
             </div>
 
             <div class="o_df_dashboard_activity">
-                <h3>Recent Quotations</h3>
+                <h3>Recently updated</h3>
                 <table t-if="state.recentOrders.length" class="o_df_activity_table">
                     <thead>
                         <tr>
                             <th>Quotation</th>
                             <th>Customer</th>
                             <th>Amount</th>
-                            <th>Risk</th>
-                            <th>Last Updated</th>
+                            <th>Discount</th>
+                            <th>Last updated</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr t-foreach="state.recentOrders" t-as="order" t-key="order.id" t-on-click="() => this.openOrder(order.id)">
                             <td t-esc="order.name"/>
                             <td t-esc="order.partner_id[1]"/>
-                            <td t-esc="order.amount_total.toLocaleString(undefined, {style: 'currency', currency: 'USD'})"/>
+                            <td t-esc="order.amountLabel"/>
                             <td>
-                                <span t-attf-class="o_df_risk_badge o_df_risk_badge_#{order.df_risk_level}" t-esc="order.df_risk_level"/>
+                                <span t-attf-class="o_df_risk_badge o_df_risk_badge_#{order.df_risk_level}" t-esc="order.riskLabel"/>
                             </td>
                             <td t-esc="order.write_date"/>
                         </tr>
                     </tbody>
                 </table>
                 <div t-else="" class="o_df_placeholder_panel">
-                    No quotations yet — create one to see activity here.
+                    Nothing here yet — create a quotation to get started.
                 </div>
             </div>
         </div>

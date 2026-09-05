@@ -2,18 +2,28 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { formatMonetary } from "@web/views/fields/formatters";
 import { Component, onWillStart, useState } from "@odoo/owl";
 
 /**
- * Screen 2 - Sales Dashboard / Home. Every number here is a real ORM read
- * over sale.order (see docs/ui_spec.md Screen 2) - no hardcoded figures.
- * "Pending Approvals" reads df_pipeline_stage='pending_approval', which is
- * a real stored field but only ever populated once DF-004's approval
- * routing lands (see models/sale_order.py::_compute_df_pipeline_stage) -
- * until then it honestly reads 0, which is correct, not a placeholder.
- * There is no dealflow.audit.log model yet, so "Recent Activity" is built
- * from real sale.order write_date ordering instead of inventing one.
+ * Sales dashboard / home. Every number is a real ORM read over sale.order -
+ * no hardcoded figures.
+ *
+ * Each card is a question the user actually has ("what needs signing off?"),
+ * and clicking it opens the matching filtered list, so the dashboard is a way
+ * INTO the work rather than a wall of statistics. Risk levels are rendered
+ * through the field's own selection labels rather than their raw stored
+ * values - the dashboard used to print "none"/"medium"/"high" straight from
+ * the database, which meant nothing to a salesperson.
  */
+// The stored values are none/medium/high; these are what a salesperson needs
+// to read off a row - the consequence, not the severity band.
+const RISK_LABELS = {
+    none: "Within limits",
+    medium: "Manager approval",
+    high: "Manager + finance",
+};
+
 export class DealflowDashboard extends Component {
     static template = "dealflow360.Dashboard";
     static props = { "*": true };
@@ -46,7 +56,14 @@ export class DealflowDashboard extends Component {
                 this.orm.searchRead(
                     "sale.order",
                     [],
-                    ["name", "partner_id", "amount_total", "write_date", "df_risk_level"],
+                    [
+                        "name",
+                        "partner_id",
+                        "amount_total",
+                        "currency_id",
+                        "write_date",
+                        "df_risk_level",
+                    ],
                     { limit: 6, order: "write_date desc" }
                 ),
             ]);
@@ -54,7 +71,13 @@ export class DealflowDashboard extends Component {
             openQuotations,
             pendingApprovals,
             atRiskDeals,
-            recentOrders,
+            recentOrders: recentOrders.map((order) => ({
+                ...order,
+                amountLabel: formatMonetary(order.amount_total, {
+                    currencyId: order.currency_id && order.currency_id[0],
+                }),
+                riskLabel: RISK_LABELS[order.df_risk_level] || order.df_risk_level,
+            })),
             loading: false,
         });
     }

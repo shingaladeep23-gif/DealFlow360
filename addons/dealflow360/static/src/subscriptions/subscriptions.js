@@ -2,15 +2,13 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { formatMonetary } from "@web/views/fields/formatters";
 import { Component, onWillStart, useState } from "@odoo/owl";
 
 /**
- * Screen 9 - Subscriptions (List). DEC-008: one recurring sale.order.line
- * IS one subscription - there is no separate "subscription" model, so this
- * reads sale.order.line directly (df_sub_state/df_sub_next_bill_date/
- * df_mrr, all real stored fields from DF-012, see models/recurring.py)
- * instead of the billing-schedule event log. Filter badges are real
- * search_count's over df_sub_state, not decoration.
+ * Subscriptions list. One recurring order line IS one subscription (there is
+ * no separate subscription model), so this reads sale.order.line directly.
+ * Filter badges are real search_count's, not decoration.
  */
 export class DealflowSubscriptions extends Component {
     static template = "dealflow360.Subscriptions";
@@ -51,6 +49,7 @@ export class DealflowSubscriptions extends Component {
                     "df_sub_state",
                     "df_sub_next_bill_date",
                     "df_mrr",
+                    "currency_id",
                 ],
                 { limit: 80 }
             ),
@@ -77,11 +76,21 @@ export class DealflowSubscriptions extends Component {
             planById[pl.id] = pl;
         }
 
+        // "monthly" straight out of the database reads like a raw enum on a
+        // screen a salesperson uses; say how often it actually bills.
+        const CYCLE_LABELS = {
+            monthly: "Every month",
+            quarterly: "Every 3 months",
+            yearly: "Every year",
+        };
         for (const row of rows) {
             const plan = planByProduct[row.product_id[0]];
             const planRec = plan ? planById[plan[0]] : false;
             row.planName = planRec ? planRec.name : "—";
-            row.cycle = planRec ? planRec.interval : "—";
+            row.cycle = planRec ? CYCLE_LABELS[planRec.interval] || planRec.interval : "—";
+            row.mrrLabel = formatMonetary(row.df_mrr, {
+                currencyId: row.currency_id && row.currency_id[0],
+            });
         }
 
         Object.assign(this.state, {

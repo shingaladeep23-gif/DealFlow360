@@ -33,7 +33,7 @@
                             <div class="o_kanban_record_body">
                                 <field name="partner_id"/>
                                 <div class="text-muted">
-                                    Margin: <field name="df_margin_pct" widget="float" digits="[1,1]"/>%
+                                    Margin <field name="df_margin_pct" widget="float" digits="[1,1]"/>%
                                 </div>
                             </div>
                             <div class="o_kanban_record_bottom">

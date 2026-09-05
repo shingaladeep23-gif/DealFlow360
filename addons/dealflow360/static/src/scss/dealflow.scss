@@ -44,14 +44,49 @@
     }
 }
 
-.o_df_flag_banner {
-    background-color: #fff8e1;
-    border: 1px solid #f0d78c;
-    border-radius: 4px;
+/* One banner shape, three urgencies. Each one tells the user what will
+   happen next rather than restating the number already shown above it. */
+.o_df_banner {
+    // Children are laid out inline with a real gap: the bold lead-in used to
+    // butt straight up against the sentence after it ("...limit.Onsite Setup
+    // Service exceeds..."), because Odoo renders an inline <field> with no
+    // surrounding whitespace.
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+    align-items: baseline;
+    border: 1px solid transparent;
+    border-radius: 6px;
     padding: 10px 14px;
     margin-bottom: 12px;
-    color: #7a5c00;
     font-size: 0.95rem;
+    line-height: 1.5;
+
+    &.o_df_banner_warning {
+        background-color: #fff8e1;
+        border-color: #f0d78c;
+        color: #7a5c00;
+    }
+
+    &.o_df_banner_danger {
+        background-color: #fdecea;
+        border-color: #f5c2c0;
+        color: #8c1c13;
+    }
+
+    &.o_df_banner_info {
+        background-color: #eef2ff;
+        border-color: #c7d2fe;
+        color: #3730a3;
+    }
+}
+
+/* One-line explainer under a screen title: what this screen is for, in the
+   user's words. Replaces subtitles that used to cite internal ticket ids. */
+.o_df_screen_hint {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin: 2px 0 16px;
 }
 
 .o_df_summary_group {
@@ -415,32 +450,40 @@
     }
 }
 
-// DF-017 Deal Health card on the quotation form. Mirrors the summary-card
-// language already used by .o_df_summary_card above rather than inventing a
-// second visual vocabulary for the same kind of panel.
-.o_df_health_card {
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
-    padding: 12px 16px;
-    margin: 0 0 12px 0;
-    background: #fbfcfd;
 
-    .o_df_health_head {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
-    }
+/* Supporting pieces for the unified quotation summary strip. The three cards
+   (margin / discount / health) deliberately share one shape so they read as
+   one status line for the deal rather than three separate features. */
+.o_df_summary_hint {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
 
-    .o_df_health_reason {
-        margin-top: 8px;
-        color: #6c757d;
-        font-size: 0.9em;
-    }
+.o_df_summary_unit {
+    color: #adb5bd;
+    font-size: 0.6em;
+    font-weight: 400;
+}
 
-    .o_df_health_since {
-        margin-top: 4px;
-        color: #adb5bd;
-        font-size: 0.85em;
-    }
+.o_df_summary_muted {
+    color: #ced4da;
+}
+
+.o_df_inline_btn {
+    padding: 0;
+    font-size: 0.85rem;
+    vertical-align: baseline;
+}
+
+/* Sits under a dashboard number and says what it counts, so the figure does
+   not have to be interpreted from its label alone. */
+.o_df_stat_hint {
+    color: #adb5bd;
+    font-size: 0.8rem;
+    margin-top: 4px;
 }

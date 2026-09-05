@@ -5,14 +5,14 @@ class SaleOrderLine(models.Model):
     _inherit = "sale.order.line"
 
     df_effective_ceiling = fields.Float(
-        string="Effective Ceiling (%)",
+        string="Discount Limit (%)",
         compute="_compute_df_governance",
         store=True,
         help="min(customer tier ceiling, product category ceiling) per DEC-003 "
         "- the maximum manual discount this line may carry before it counts as excess.",
     )
     df_excess_points = fields.Float(
-        string="Excess (points)",
+        string="Over Limit By",
         compute="_compute_df_governance",
         store=True,
         help="Percentage points by which the rep's discount exceeds "

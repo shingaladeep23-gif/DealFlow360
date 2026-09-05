@@ -1,116 +1,127 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- DF-005b/DF-009: Screen 4 - Quotation Detail. Every field bound here
-         already exists on main (df_effective_ceiling/df_excess_points/
-         df_margin_pct on the line; df_margin_pct/df_blended_risk_score/
-         df_risk_level/df_risk_summary on the order - see
-         models/sale_order*.py). The upsell panel is bound to the always-
-         present "id" field purely as an OWL widget mount point (see
-         static/src/fields/upsell_panel/) - it is not a real editable
-         field, just the cleanest way to embed a widget without a new
-         model field. "Submit for Approval" is still not built (DF-004's
-         API differs from what this brief originally assumed - see
-         action_confirm's own routing instead). -->
+    <!-- Quotation detail (Screen 4).
+
+         Design rule for this screen: a salesperson should be able to answer
+         three questions without training or a glossary -
+             "Am I making money?"        -> Margin
+             "Can I just send this?"     -> Discount status
+             "Is this deal in trouble?"  -> Deal health
+         so the three summary cards below answer exactly those, in that order,
+         and everything else is either a line-level number or lives in the
+         Deal Details tab. Field labels come from the model (see
+         models/sale_order.py) and deliberately state consequences rather than
+         internal severities - "Needs manager approval", not "Medium". -->
     <record id="view_order_form_dealflow" model="ir.ui.view">
         <field name="name">sale.order.form.dealflow</field>
         <field name="model">sale.order</field>
         <field name="inherit_id" ref="sale.view_order_form"/>
         <field name="arch" type="xml">
-            <!-- Line table: governance ceiling/excess and live margin,
-                 right after the native discount column. Row turns red when
-                 the rep's discount blows through df_effective_ceiling -
-                 the mockup's "Status: Over Limit" is this decoration, not a
-                 stored field (DEC-003 defines excess as the source of
-                 truth; a separate status field would just be able to
-                 drift out of sync with it). -->
+            <!-- Line table: the discount limit that applies to THIS line, how
+                 far past it the rep has gone, and what margin is left. The row
+                 turns red when the line is over its limit - the mockup's
+                 "Status: Over Limit" is this decoration, not a stored field
+                 (DEC-003 makes excess the source of truth; a separate status
+                 field could only drift out of sync with it). -->
             <xpath expr="//field[@name='order_line']/tree" position="attributes">
-                <attribute name="decoration-danger">df_excess_points > 0</attribute>
+                <attribute name="decoration-danger">df_excess_points &gt; 0</attribute>
             </xpath>
             <xpath expr="//field[@name='order_line']/tree/field[@name='discount']" position="after">
-                <field name="df_effective_ceiling" string="Limit (%)" optional="show"/>
-                <field name="df_excess_points" string="Excess (pts)" optional="show"
-                       decoration-danger="df_excess_points > 0"/>
-                <field name="df_margin_pct" string="Margin (%)" optional="show"/>
+                <field name="df_effective_ceiling" string="Max Discount %" optional="show"/>
+                <field name="df_excess_points" string="Over By" optional="show"
+                       decoration-danger="df_excess_points &gt; 0"/>
+                <field name="df_margin_pct" string="Margin %" optional="show"/>
             </xpath>
 
-            <!-- Order-level summary: live margin + blended risk gauge, and
-                 the flag banner explaining why (df_risk_summary is written
-                 by the engine to be displayed as-is - DF-005 brief says use
-                 it rather than re-deriving the sentence here). -->
+            <!-- One summary strip, three cards of the same shape. These used
+                 to be two differently-styled blocks (margin/risk in one,
+                 health in another), which read as two unrelated features
+                 rather than one status line for the deal. -->
             <xpath expr="//notebook" position="before">
+                <field name="df_risk_summary" invisible="1"/>
+                <field name="df_risk_level" invisible="1"/>
+                <field name="df_health_reason" invisible="1"/>
+
                 <div class="o_df_summary_group">
                     <div class="o_df_summary_card">
-                        <div class="o_df_summary_label">Live Margin</div>
+                        <div class="o_df_summary_label">Margin</div>
                         <div class="o_df_summary_value">
                             <field name="df_margin_pct" nolabel="1" digits="[1,1]"/>%
                         </div>
+                        <div class="o_df_summary_hint">Revenue left after product cost</div>
                     </div>
+
                     <div class="o_df_summary_card">
-                        <div class="o_df_summary_label">Discount Risk</div>
-                        <field name="df_risk_summary" invisible="1"/>
-                        <field name="df_risk_level" invisible="1"/>
+                        <div class="o_df_summary_label">Discount</div>
                         <field name="df_blended_risk_score" widget="dealflow_risk_gauge" nolabel="1"/>
+                        <div class="o_df_summary_hint">
+                            <field name="df_risk_level" nolabel="1" readonly="1"/>
+                        </div>
+                    </div>
+
+                    <div class="o_df_summary_card">
+                        <div class="o_df_summary_label">Deal Health</div>
+                        <div class="o_df_summary_value" invisible="not df_health_status">
+                            <field name="df_health_score" nolabel="1" readonly="1"/><span class="o_df_summary_unit">/100</span>
+                        </div>
+                        <div class="o_df_summary_value o_df_summary_muted" invisible="df_health_status">—</div>
+                        <div class="o_df_summary_hint">
+                            <field name="df_health_status" widget="label_selection" nolabel="1"
+                                   options="{'classes': {'healthy': 'success', 'at_risk': 'warning', 'critical': 'danger'}}"
+                                   invisible="not df_health_status"/>
+                            <span invisible="df_health_status">Not scored yet</span>
+                            <button name="action_df_refresh_health" type="object"
+                                    string="Check now" class="btn btn-link btn-sm o_df_inline_btn"/>
+                        </div>
                     </div>
                 </div>
-                <div class="o_df_flag_banner" invisible="not df_risk_summary">
-                    <strong>⚠ </strong>
-                    <field name="df_risk_summary" nolabel="1" readonly="1"/>
-                    — flagged for approval.
+
+                <!-- What happens next, in plain words. The old banner showed
+                     the engine's sentence and stopped there, leaving the rep
+                     to work out the consequence; these say who has to sign. -->
+                <div class="o_df_banner o_df_banner_warning"
+                     invisible="df_risk_level != 'medium' or state in ['sale', 'done', 'cancel']">
+                    <strong>Over the discount limit.</strong>
+                    <span><field name="df_risk_summary" nolabel="1" readonly="1"/></span>
+                    <span>Confirming will send it to a <strong>sales manager</strong> for approval
+                    rather than confirming it.</span>
                 </div>
+                <div class="o_df_banner o_df_banner_danger"
+                     invisible="df_risk_level != 'high' or state in ['sale', 'done', 'cancel']">
+                    <strong>Well over the discount limit.</strong>
+                    <span><field name="df_risk_summary" nolabel="1" readonly="1"/></span>
+                    <span>Confirming will send it to a <strong>sales manager and then finance</strong>
+                    for approval rather than confirming it.</span>
+                </div>
+                <div class="o_df_banner o_df_banner_info" invisible="not df_health_reason">
+                    <strong>Needs attention.</strong>
+                    <span><field name="df_health_reason" nolabel="1" readonly="1"/></span>
+                </div>
+
                 <field name="id" widget="dealflow_upsell_panel" nolabel="1"/>
             </xpath>
 
-            <!-- DF-017 Deal Health. The scoring engine, its four signals and
-                 its cron all landed in 30bb7a0, but nothing in the frontend
-                 ever read df_health_* - the feature existed only in Python
-                 and was invisible to every user. This card is the missing
-                 half: real stored values, plus a Refresh that runs the same
-                 _compute_deal_health() the cron does, because two of the
-                 four signals are functions of elapsed time and would
-                 otherwise only ever change every six hours. -->
-            <xpath expr="//notebook" position="before">
-                <div class="o_df_health_card" invisible="not df_health_status">
-                    <div class="o_df_health_head">
-                        <div>
-                            <div class="o_df_summary_label">Deal Health</div>
-                            <div class="o_df_summary_value">
-                                <field name="df_health_score" nolabel="1" readonly="1"/>/100
-                            </div>
-                        </div>
-                        <field name="df_health_status" widget="label_selection" nolabel="1"
-                               options="{'classes': {'healthy': 'success', 'at_risk': 'warning', 'critical': 'danger'}}"/>
-                        <button name="action_df_refresh_health" type="object"
-                                string="Refresh" class="btn btn-secondary btn-sm"/>
-                    </div>
-                    <field name="df_health_flags" widget="many2many_tags" nolabel="1" readonly="1"
-                           invisible="not df_health_flags"/>
-                    <div class="o_df_health_reason" invisible="not df_health_reason">
-                        <field name="df_health_reason" nolabel="1" readonly="1"/>
-                    </div>
-                    <div class="o_df_health_since" invisible="not df_health_flagged_date">
-                        Flagged since <field name="df_health_flagged_date" nolabel="1" readonly="1"/>
-                    </div>
-                </div>
-            </xpath>
-
-            <!-- Full detail tab kept for anyone auditing the raw governance
-                 fields (QA, admins) alongside the compact summary above. -->
+            <!-- Everything behind the summary, for anyone who wants the raw
+                 numbers (QA, managers auditing a decision). Kept off the main
+                 sheet so the default view stays short. -->
             <xpath expr="//notebook" position="inside">
-                <page string="DealFlow360" name="dealflow360">
+                <page string="Deal Details" name="dealflow360">
                     <group>
-                        <field name="df_margin_pct"/>
-                        <field name="df_pipeline_stage"/>
-                        <field name="df_blended_risk_score"/>
-                        <field name="df_risk_level"/>
-                        <field name="df_risk_summary"/>
-                    </group>
-                    <group string="Deal Health (DF-017)">
-                        <field name="df_health_score"/>
-                        <field name="df_health_status"/>
-                        <field name="df_health_flags" widget="many2many_tags"/>
-                        <field name="df_health_reason"/>
-                        <field name="df_health_flagged_date"/>
-                        <field name="df_last_activity"/>
+                        <group string="Discount &amp; approval">
+                            <field name="df_pipeline_stage"/>
+                            <field name="df_risk_level"/>
+                            <field name="df_blended_risk_score"/>
+                            <field name="df_risk_summary"/>
+                            <field name="df_margin_pct"/>
+                        </group>
+                        <group string="Deal health">
+                            <field name="df_health_score"/>
+                            <field name="df_health_status"/>
+                            <field name="df_health_flags" widget="many2many_tags"/>
+                            <field name="df_health_reason"/>
+                            <field name="df_health_flagged_date"/>
+                            <field name="df_last_activity"/>
+                        </group>
                     </group>
                 </page>
             </xpath>

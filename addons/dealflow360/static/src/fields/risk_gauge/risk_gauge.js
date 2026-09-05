@@ -5,11 +5,10 @@ import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { Component } from "@odoo/owl";
 
 /**
- * Read-only gauge for DEC-003's blended discount-risk score. Bind it to
+ * Read-only gauge for the discount-risk score. Bind it to
  * df_blended_risk_score; it reads the sibling df_risk_level/df_risk_summary
- * fields off the same record so Screen 4 (Quotation Detail) and Screen 7
- * (Approval Detail, DF-006) can share one widget instead of two hand-built
- * badges that could drift out of sync with DEC-003's wording.
+ * off the same record, so the quotation and approval screens share one widget
+ * rather than two hand-built badges that could drift apart.
  */
 export class DealflowRiskGauge extends Component {
     static template = "dealflow360.RiskGauge";
@@ -25,7 +24,15 @@ export class DealflowRiskGauge extends Component {
         return this.props.record.data.df_risk_summary;
     }
     get levelLabel() {
-        return { none: "No Risk", medium: "Medium Risk", high: "High Risk" }[this.level];
+        // Matches df_risk_level's own selection labels. The gauge used to
+        // invent its own wording ("High Risk") and sit right above the field
+        // label ("Needs manager + finance"), so one deal carried two
+        // different names for the same state.
+        return {
+            none: "Within limits",
+            medium: "Over limit",
+            high: "Well over limit",
+        }[this.level];
     }
 }
 

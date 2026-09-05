@@ -9,31 +9,31 @@ ROLE_GROUP_XMLID = {
 
 class DealflowApproval(models.Model):
     _name = "dealflow.approval"
-    _description = "DealFlow360 Discount Approval Chain (DEC-003/DEC-010)"
+    _description = "Discount Approval"
     _order = "create_date desc"
 
     order_id = fields.Many2one(
         "sale.order", string="Quotation", required=True, ondelete="cascade", index=True
     )
     risk_score = fields.Float(
-        string="Risk Score",
+        string="Discount Risk",
         readonly=True,
         help="Snapshot of df_blended_risk_score at the moment this approval "
         "chain was created - the routing decision, not a live value.",
     )
     risk_level = fields.Selection(
-        [("medium", "Medium"), ("high", "High")],
-        string="Risk Level",
+        [("medium", "Manager approval"), ("high", "Manager + finance")],
+        string="Approval Needed",
         readonly=True,
         help="Snapshot of df_risk_level at creation. NONE never reaches this "
         "model - DEC-003's NONE case is auto-approved and never routed.",
     )
     state = fields.Selection(
         [
-            ("pending", "Pending"),
+            ("pending", "Awaiting decision"),
             ("approved", "Approved"),
             ("rejected", "Rejected"),
-            ("revision", "Revision Requested"),
+            ("revision", "Changes requested"),
         ],
         string="Status",
         default="pending",
@@ -131,7 +131,7 @@ class DealflowApproval(models.Model):
 
 class DealflowApprovalStep(models.Model):
     _name = "dealflow.approval.step"
-    _description = "DealFlow360 Approval Step"
+    _description = "Approval Step"
     _order = "sequence"
 
     approval_id = fields.Many2one(
@@ -150,11 +150,12 @@ class DealflowApprovalStep(models.Model):
     state = fields.Selection(
         [
             ("waiting", "Waiting"),
-            ("pending", "Pending"),
+            ("pending", "Action needed"),
             ("approved", "Approved"),
             ("rejected", "Rejected"),
-            ("revision", "Revision Requested"),
+            ("revision", "Changes requested"),
         ],
+        string="Status",
         default="waiting",
         readonly=True,
     )

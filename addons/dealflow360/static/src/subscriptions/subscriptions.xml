@@ -4,7 +4,7 @@
         <div class="o_df_subscriptions">
             <div class="o_df_subscriptions_header">
                 <h2>Subscriptions</h2>
-                <p class="text-muted">One row per recurring order line (DEC-008) - real lifecycle state and next-bill date from DF-012.</p>
+                <p class="o_df_screen_hint">Everything you bill on a repeating basis, and when each one bills next.</p>
             </div>
 
             <div class="o_df_subscriptions_cards">
@@ -28,9 +28,9 @@
                         <th>Order</th>
                         <th>Product</th>
                         <th>Plan</th>
-                        <th>Cycle</th>
-                        <th>Next Bill</th>
-                        <th>MRR</th>
+                        <th>Billed</th>
+                        <th>Bills next</th>
+                        <th>Per month</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -40,7 +40,7 @@
                         <td t-esc="row.planName"/>
                         <td t-esc="row.cycle"/>
                         <td t-esc="row.df_sub_next_bill_date"/>
-                        <td t-esc="row.df_mrr.toLocaleString(undefined, {style: 'currency', currency: 'USD'})"/>
+                        <td t-esc="row.mrrLabel"/>
                     </tr>
                 </tbody>
             </table>

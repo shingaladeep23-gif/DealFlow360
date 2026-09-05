@@ -10,13 +10,13 @@
         <field name="arch" type="xml">
             <xpath expr="//form" position="inside">
                 <div class="app_settings_block" data-string="DealFlow360" string="DealFlow360" data-key="dealflow360">
-                    <h2>Discount Risk Routing</h2>
+                    <h2>Discount approvals</h2>
                     <div class="row mt16 o_settings_container">
                         <div class="col-12 col-lg-6 o_setting_box">
                             <div class="o_setting_right_pane">
                                 <label for="dealflow_risk_high_min"/>
                                 <div class="text-muted">
-                                    Blended risk scores above this value route HIGH (Sales Manager then Finance); at or below it (and above zero), MEDIUM (Sales Manager only).
+                                    How far over the discount limit a quotation has to go before finance has to sign off too. Above this score a deal needs a sales manager and then finance; at or below it, just a sales manager.
                                 </div>
                                 <field name="dealflow_risk_high_min"/>
                             </div>

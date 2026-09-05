@@ -23,15 +23,15 @@
                 <field name="partner_id"/>
                 <field name="user_id" string="Salesperson"/>
                 <field name="amount_total" widget="monetary"/>
-                <field name="df_health_score" string="Health"/>
+                <field name="df_health_score" string="Score"/>
                 <field name="df_health_status" widget="badge"
                        decoration-success="df_health_status == 'healthy'"
                        decoration-warning="df_health_status == 'at_risk'"
                        decoration-danger="df_health_status == 'critical'"/>
                 <field name="df_health_flags" widget="many2many_tags"/>
-                <field name="df_health_reason" string="Why"/>
-                <field name="df_health_flagged_date" string="Flagged Since"/>
-                <field name="df_last_activity" string="Last Activity"/>
+                <field name="df_health_reason" string="What is wrong"/>
+                <field name="df_health_flagged_date" string="Flagged since"/>
+                <field name="df_last_activity" string="Last activity"/>
                 <field name="df_risk_level" widget="label_selection"
                        options="{'classes': {'none': 'success', 'medium': 'warning', 'high': 'danger'}}"/>
             </tree>
@@ -52,10 +52,10 @@
                 <filter name="healthy" string="Healthy"
                         domain="[('df_health_status', '=', 'healthy')]"/>
                 <separator/>
-                <filter name="flagged" string="Has Any Signal"
+                <filter name="flagged" string="Has a warning sign"
                         domain="[('df_health_flags', '!=', False)]"/>
                 <group expand="0" string="Group By">
-                    <filter name="group_status" string="Health Status"
+                    <filter name="group_status" string="Health"
                             context="{'group_by': 'df_health_status'}"/>
                     <filter name="group_salesperson" string="Salesperson"
                             context="{'group_by': 'user_id'}"/>
@@ -72,9 +72,11 @@
         <field name="search_view_id" ref="view_deal_health_search"/>
         <field name="context">{'tree_view_ref': 'dealflow360.view_deal_health_tree'}</field>
         <field name="help" type="html">
-            <p class="o_view_nocontent_smiling_face">No live deals to score yet.</p>
-            <p>Deal health is recomputed every six hours by the DF-017 cron, and
-               on demand from the Refresh button on any quotation.</p>
+            <p class="o_view_nocontent_smiling_face">No open deals to score yet.</p>
+            <p>Every open deal is scored out of 100 and re-checked automatically a few
+               times a day. A deal loses points when it goes quiet, carries an unusually
+               deep discount, sits waiting on an approval, or cannot be filled from
+               stock. You can also re-check any deal from its own page.</p>
         </field>
     </record>
 
