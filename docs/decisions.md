@@ -224,6 +224,8 @@ Buckets: **≥80 Healthy · 50–79 At Risk · <50 Critical**
   - *Make `product.category.df_max_discount` a related field off `dealflow.category.limit`* — rejected: inverts native-first, making a custom model authoritative over a native one.
 - **Status:** Accepted — supersedes the `dealflow.category.limit` row in architecture.md §3.2.
 
+- **Implementation addendum (DF-003c, 2026-09-05):** checked whether the deleted model's admin ACL (`perm_write=1`) needed a replacement now that "Category Limits" is a view over `product.category`. `product`'s own `ir.model.access.csv` grants `product.category` write/create/unlink only to `base.group_system`, which none of our `group_dealflow_*` roles imply — so a naive read of that one file suggested `group_dealflow_admin` would lose write access. It does not: `sale`'s own `ir.model.access.csv` separately grants full CRUD on `product.category` to `sales_team.group_sale_manager` (`access_product_category_sale_manager`), and `group_dealflow_admin` implies `group_dealflow_sales_manager` implies `sales_team.group_sale_manager` (`dealflow_security.xml`). Confirmed live in an `odoo shell`: a fresh user in only `group_dealflow_admin` successfully wrote `df_max_discount` on the seeded Hardware category with zero DealFlow-specific ACL rows present. No new access row was needed or added — this is exactly the native-first outcome DEC-014 argues for, one layer further than the decision anticipated.
+
 ---
 
 ## DEC-015 — Pricelist price must be read via `pricelist._get_product_price()`

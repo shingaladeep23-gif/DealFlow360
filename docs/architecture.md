@@ -18,7 +18,7 @@ addons/dealflow360/
 ├── __manifest__.py          depends: base, mail, product, sale_management,
 │                                     sale_stock, stock, account, portal
 ├── models/
-│   ├── discount_tier.py     dealflow.discount.tier, dealflow.category.limit
+│   ├── discount_tier.py     dealflow.discount.tier
 │   ├── res_partner.py       + df_tier_id
 │   ├── product.py           product.category + df_max_discount
 │   │                        product.template + recurring/promo/margin fields
@@ -34,7 +34,7 @@ addons/dealflow360/
 ├── views/                   backend XML views + menus
 ├── static/src/              OWL components (upsell panel, risk gauge, dashboards)
 ├── security/                ir.model.access.csv + record rules + groups
-├── data/                    default tiers, category limits, cron
+├── data/                    default tiers, seed categories + ceilings, cron
 ├── demo/                    seed data (customers, products, warehouses, stock)
 └── tests/                   Odoo unit tests
 ```
@@ -63,7 +63,6 @@ addons/dealflow360/
 | Model | Key fields | Purpose |
 |---|---|---|
 | `dealflow.discount.tier` | `name`, `max_discount` | Bronze 5%, Silver 10%, Gold 15% |
-| `dealflow.category.limit` | `category_id`, `max_discount` | Hardware 15%, Services 10% |
 | `dealflow.approval` | `order_id`, `state`, `risk_score`, `risk_level`, `step_ids` | approval chain per quotation |
 | `dealflow.approval.step` | `approval_id`, `role`, `sequence`, `approver_id`, `state`, `reason`, `acted_on` | Sales Manager → Finance |
 | `dealflow.audit.log` | `order_id`, `user_id`, `timestamp`, `action`, `detail` | immutable audit trail |
