@@ -97,21 +97,38 @@ Worth demonstrating — it proves the chain is not cosmetic.
 
 ## 3. FLOW 2 — customer negotiation (portal)
 
-**Partially verified.** Verified by QA against the live server with real
-browser-equivalent sessions:
+**VERIFIED END-TO-END as one continuous walk**, on real HTTP sessions
+against a live server. Every state change below was confirmed in postgres,
+not read off a screen.
 
-- portal customer opens **their own** quotation → **200**, correct status
-- portal customer opens **another customer's** quotation → **403**
-- posting a counter-discount flips the order to **Under Negotiation**
-- `_df_trigger_reapproval` exists on `sale.order` and re-raises approval
+1. Portal login as the customer → **200**.
+2. Open own quotation → **200**, correct status.
+3. Enter a **counter-discount of 40%** → risk flips to **HIGH**,
+   `_df_trigger_reapproval` fires from the negotiation path and creates a
+   real two-step chain (**sales_manager pending → finance waiting**).
+   Status becomes **Under Negotiation**.
+4. Customer tries to confirm while approval is pending → **correctly
+   blocked**, order stays Draft.
+5. *(Worth showing)* A superuser attempting the manager step is **refused**:
+   `UserError: Only a Sales Manager may act on this approval step.`
+6. Approve as a real **Sales Manager**, then as a real **Finance** user →
+   chain reaches state `approved`.
+7. Customer confirms from the portal → **succeeds**. `order.state == 'sale'`,
+   `invoice_status == 'to invoice'` — a real state transition, verified in
+   the database.
 
-**Not yet rehearsed as one continuous browser walk:** counter-discount →
-reapproval → manager approves → customer confirms. Demo this flow only if
-QA has confirmed the full walk; otherwise show the verified portions and
-say plainly that the last leg is not yet rehearsed.
+Security invariants re-proven after the record-rule change:
+own quotation **200**, another customer's quotation **403**,
+`test_portal_isolation` **9/9** green.
 
-**Do not claim anything in this section that has not been re-verified on
-the day.**
+> **Bug found and fixed during this walk** (`c7ef60a`): the portal confirm
+> route had its own pre-check gating on `df_risk_level != 'none'` and the
+> negotiation's `state`. Neither ever resets once a chain is approved — risk
+> level is inherent to the discount, and the negotiation state is an
+> audit-trail marker, not a live gate. A flagged order could therefore
+> **never** be confirmed from the portal even after full manager + finance
+> approval, and it would have looked identical to "still pending" on screen.
+> This is exactly the failure that would have broken the demo live.
 
 ---
 
@@ -132,13 +149,27 @@ the day.**
 - Deal-health scoring cron (DF-017) and the health dashboard (DF-018)
 - Recurring billing / proration (DF-012)
 
-**Test baseline:** 41 passed / 17 failed of 58. Of the failures, 9 are a
-trigger-semantics mismatch in `test_approval.py` (tests assert an approval
-exists without calling `action_confirm`; the implementation raises it on
-confirm) and 8 are an Odoo `HttpCase` harness artifact — a `RecursionError`
-in `res.lang`/`ir.model.access` cache on the first request after a worker
-registry reload, producing spurious 500s. The portal behaviour those tests
-cover was verified correct against a real running server.
+**Test status — the honest, evidenced version.**
+
+A full `--test-enable` run on a fresh database produced **12 failures, and
+every one of them is in Odoo's own core modules**: `spreadsheet_dashboard`
+(9), `web` (2), `web_unsplash` (1). **Zero failures in `dealflow360`.**
+Odoo's own `TestWebLogin.test_web_login` fails with
+`404 on /web/session/check`.
+
+That is conclusive: the **`HttpCase` test harness is broken in this
+Docker/Odoo-17 container**, not the application. Behaviour those tests cover
+was verified directly against a live running server with real HTTP sessions.
+
+Earlier in the sprint an apparent "9 approval test failures" was traced to a
+**same-path file collision** — two agents had independently created
+`tests/test_approval.py`. The version on `main` is the correct one:
+12 tests, all driving `action_confirm()`, all green.
+
+*Odoo trap worth knowing:* `TransactionCase.assertRaises` wraps the call in a
+savepoint that **rolls back the very records the call created**, so a test
+asserting on state produced by a raising call will see nothing. Use a plain
+`try/except`.
 
 ---
 
