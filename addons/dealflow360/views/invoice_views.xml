@@ -19,7 +19,7 @@
     </record>
 
     <record id="menu_dealflow_invoices" model="ir.ui.menu">
-        <field name="action">%(action_dealflow_invoices)d</field>
+        <field name="action" eval="'ir.actions.act_window,%d' % ref('action_dealflow_invoices')"/>
     </record>
 
     <record id="view_move_form_dealflow_stepper" model="ir.ui.view">
