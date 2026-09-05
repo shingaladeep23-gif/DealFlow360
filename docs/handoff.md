@@ -6,6 +6,45 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-014/DF-016 (live-verified) — Pam — 2026-09-05
+
+**Completed work**
+- Live-tested the first-pass portal work (below) against my own database `df_pam`, via `docker exec` into Atlas's already-running containers (never touched his compose lifecycle). First run: **1 failed, 1 error of 30 tests** — both about a portal user reading their *own* order, not cross-customer leakage (every isolation-specific test passed clean: search excludes other customer, search_read excludes, browse+read raises AccessError, write attempt raises AccessError, two portal users' results disjoint, cross-customer negotiation read excluded — 5/5 for the actual security requirement).
+- Root-caused and fixed the failure: `sale`'s own native portal rule on `sale.order`/`sale.order.line` (`sale_order_rule_portal` / `sale_order_line_rule_portal` in `odoo/addons/sale/security/ir_rules.xml`) is **follower-based** (`message_partner_ids`), scoped to `base.group_portal`. Group rules OR together, but that OR-set still ANDs against DEC-012's global partner_id rule — so any quotation nobody had explicitly "sent" (no chatter follower yet) was unreadable **even to its own owner**. Fixed via DEC-018: a same-domain rule added to the *same* portal group so the OR-set becomes `(follower OR partner_id)`, which reduces to exactly the global rule's boundary (`A AND (B OR A) == A`) — cannot widen access, never touches/replaces the native rule.
+- Also found and fixed (DEC-019): `sale.order.df_pipeline_stage` has no `sent` value and today only computes `draft`/`confirmed` (see its own docstring in `models/sale_order.py`) — so the portal's status badge was silently wrong for a "sent" or negotiated quotation, even though AT-08 explicitly wants Sent/Under Negotiation/Confirmed. Computed a portal-specific label instead (`controllers/portal.py::_dealflow_portal_status`) from `order.state` + whether a `dealflow.negotiation` exists — no change to `sale_order.py` needed.
+- Re-ran the full suite once Atlas's tree (which the shared container's `/mnt/extra-addons` bind-mounts) picked up the DEC-018 fix: **0 failed, 0 error(s) of 30 tests** (11 of mine — 5 portal-status + 7 isolation... see exact count in `tests/`, plus 4 negotiation — + Atlas's 19).
+- Manually grepped `views/portal_templates.xml` and `controllers/portal.py` for every internal field named in the DF-014 task brief (`df_effective_ceiling`, `df_excess_points`, `df_margin_pct`, `df_blended_risk_score`, `df_risk_level`, `df_risk_summary`): zero occurrences in the template; the two controller references to `df_risk_level` are server-side only (deciding whether to block portal confirm), never rendered to the customer.
+
+**Important files**
+- `addons/dealflow360/security/dealflow_security.xml` (DEC-018 rules)
+- `addons/dealflow360/controllers/portal.py` (`_dealflow_portal_status`)
+- `addons/dealflow360/views/portal_templates.xml`
+- `addons/dealflow360/tests/test_portal_status.py` (new)
+- `docs/decisions.md` (DEC-018, DEC-019)
+
+**Current state**
+- All pushed to `main` (`51c8e49`, `8f79ca9`). Live-verified against the shared stack under my own database `df_pam` — first genuine (not py_compile-only) verification of this task's code.
+
+**Dependencies**
+- DF-015 still blocked on Atlas's DF-004 (`dealflow.approval`) — unchanged from the previous entry.
+
+**Known issues**
+- Same as the previous entry: portal-mediated `action_confirm()` runs under `sudo()`, so there's no distinct "confirmed by customer" identity in the audit trail yet.
+- Not yet done: a real browser click-through (only ORM/controller-method level tests exist so far) and a check of browser console / server log during that click-through, per the standing acceptance criteria.
+
+**Remaining work**
+- Browser-based click-through of `/my/quotations` and `/my/quotation/<id>` as two different seeded portal users, watching server log + browser console.
+- DF-015's real reapproval-chain hook once DF-004 lands.
+
+**Recommended next task**
+- Once Atlas's DF-004 lands: wire `requires_reapproval` into a real `dealflow.approval` record (DF-015), then DF-007's full vertical-slice QA.
+
+**Tests performed**
+- `docker exec dealflow360-odoo-1 odoo -d df_pam -i dealflow360 --stop-after-init` — clean install, 60 modules, 0 errors (includes `views/portal_templates.xml` loading without error).
+- `docker exec dealflow360-odoo-1 odoo -d df_pam -u dealflow360 --test-enable --stop-after-init`, run twice: first **1 failed, 1 error of 30** (DEC-018 bug found), second (after the fix propagated into Atlas's tree) **0 failed, 0 error(s) of 30 tests**.
+
+---
+
 ## DF-003b — Stack up, DEC-015 fixed at the root, real risk tests, first live verification — Atlas — 2026-09-05
 
 **Completed work**
