@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+from dateutil.relativedelta import relativedelta
+
 from odoo.tests.common import TransactionCase, tagged
 
 
@@ -48,6 +50,23 @@ class TestRecurringBilling(TransactionCase):
             }
         )
         return order, line
+
+    def _bill_first_cycle(self, line, days_remaining):
+        """Put `line` in a genuinely mid-cycle state: the cycle it is inside
+        has been INVOICED at the old figure, the next one is queued, and
+        `days_remaining` days are left to run.
+
+        Proration only ever makes sense against a period the customer has
+        already paid for. These tests used to simply push df_sub_next_bill_date
+        forward while the FIRST cycle's invoice was still pending, which is a
+        state the engine cannot reach on its own - and under that state the
+        correct behaviour is to re-price the pending entry, not to prorate on
+        top of it. See sale.order.line._df_unbilled_current_cycle_entry.
+        """
+        self.env["dealflow.billing.schedule"]._cron_generate_recurring_invoices()
+        line.df_sub_next_bill_date = line.df_sub_start_date + timedelta(
+            days=days_remaining
+        )
 
     # -- confirming starts the subscription ---------------------------------
 
@@ -222,7 +241,7 @@ class TestRecurringBilling(TransactionCase):
         order, line = self._make_order(product, qty=1)
         order.action_confirm()
         # 15 days left out of a 30-day month -> ~half a cycle remaining.
-        line.df_sub_next_bill_date = line.df_sub_start_date + timedelta(days=15)
+        self._bill_first_cycle(line, days_remaining=15)
 
         line.product_uom_qty = 2  # add one more unit mid-cycle
 
@@ -235,7 +254,7 @@ class TestRecurringBilling(TransactionCase):
         product = self._make_recurring_product("Proration Down Plan", 300.0)
         order, line = self._make_order(product, qty=2)
         order.action_confirm()
-        line.df_sub_next_bill_date = line.df_sub_start_date + timedelta(days=15)
+        self._bill_first_cycle(line, days_remaining=15)
 
         line.product_uom_qty = 1  # drop a unit mid-cycle
 
@@ -250,7 +269,7 @@ class TestRecurringBilling(TransactionCase):
         product = self._make_recurring_product("No Proration Plan", 300.0)
         order, line = self._make_order(product, qty=1)
         order.action_confirm()
-        line.df_sub_next_bill_date = line.df_sub_start_date  # due today
+        self._bill_first_cycle(line, days_remaining=0)  # next cycle due today
 
         line.product_uom_qty = 2
 
@@ -265,7 +284,7 @@ class TestRecurringBilling(TransactionCase):
         )
         order, line = self._make_order(product, qty=1)
         order.action_confirm()
-        line.df_sub_next_bill_date = line.df_sub_start_date + timedelta(days=15)
+        self._bill_first_cycle(line, days_remaining=15)
 
         line.product_uom_qty = 2
 
@@ -333,3 +352,166 @@ class TestRecurringBilling(TransactionCase):
 
         pending_before.invalidate_recordset()
         self.assertEqual(pending_before.state, "cancelled")
+
+    # -- editing a live subscription must reach the SCHEDULE, not just the line
+    #
+    # Every test below reproduces a way the schedule used to drift away from
+    # the line it bills. The line always updated correctly; the pending
+    # schedule entry kept its original snapshotted amount, so the cron carried
+    # on raising invoices for the superseded figure indefinitely.
+
+    def _pending_cycles(self, line):
+        return line.billing_schedule_ids.filtered(
+            lambda s: s.state == "pending" and not s.df_is_proration
+        )
+
+    def test_quantity_change_reprices_every_future_cycle(self):
+        """The headline under-billing bug, reproduced end to end.
+
+        999.00/month at quantity 2, one cycle already invoiced, then quantity
+        2 -> 5. Billing history stays 1,998.00; the current cycle is prorated;
+        and - the part that was broken - the NEXT cycle bills 5 x 999, not the
+        old 2 x 999. It used to stay 1,998.00 forever: 2,997.00 a month
+        under-billed, silently, with no error raised anywhere.
+        """
+        product = self._make_recurring_product("Core Plan", 999.0)
+        order, line = self._make_order(product, qty=2)
+        order.action_confirm()
+        self._bill_first_cycle(line, days_remaining=28)
+        invoiced = line.billing_schedule_ids.filtered(
+            lambda s: s.state == "invoiced"
+        )
+        self.assertAlmostEqual(invoiced.amount, 1998.0, places=2)
+
+        line.product_uom_qty = 5
+
+        self.assertAlmostEqual(
+            invoiced.amount, 1998.0, places=2, msg="invoiced history is never rewritten"
+        )
+        proration = line.billing_schedule_ids.filtered("df_is_proration")
+        self.assertEqual(len(proration), 1)
+        self.assertGreater(proration.amount, 0.0)
+        self.assertLessEqual(proration.amount, 2997.0)
+        pending = self._pending_cycles(line)
+        self.assertEqual(len(pending), 1)
+        self.assertAlmostEqual(pending.amount, 4995.0, places=2)
+
+    def test_unit_price_change_reprices_the_pending_cycle(self):
+        product = self._make_recurring_product("Price Edit Plan", 999.0)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        self._bill_first_cycle(line, days_remaining=28)
+
+        line.price_unit = 100.0
+
+        self.assertAlmostEqual(line.price_subtotal, 100.0, places=2)
+        self.assertAlmostEqual(self._pending_cycles(line).amount, 100.0, places=2)
+
+    def test_discount_change_reprices_the_pending_cycle(self):
+        product = self._make_recurring_product("Discount Edit Plan", 999.0)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        self._bill_first_cycle(line, days_remaining=28)
+
+        line.discount = 50.0
+
+        self.assertAlmostEqual(line.price_subtotal, 499.5, places=2)
+        self.assertAlmostEqual(self._pending_cycles(line).amount, 499.5, places=2)
+
+    def test_product_swap_reprices_the_schedule_and_adopts_the_new_cadence(self):
+        """Swap a monthly 999.00 line for a quarterly 300.00 product: the
+        schedule has to pick up BOTH the new price and the new cadence, or the
+        cron invoices 999.00 for a 300.00 product, monthly, forever.
+
+        (Odoo itself refuses a product swap once a line has been invoiced -
+        sale.order.line.write guards on qty_invoiced - so the reachable window
+        for this is a confirmed subscription whose first cycle has not billed
+        yet, which is exactly what this sets up.)
+        """
+        quarterly_plan = self.env["dealflow.recurring.plan"].create(
+            {"name": "Swap Quarterly", "interval": "quarterly"}
+        )
+        monthly_product = self._make_recurring_product("Core Plan Monthly", 999.0)
+        quarterly_product = self._make_recurring_product(
+            "Lite Plan Quarterly", 300.0, plan=quarterly_plan
+        )
+        order, line = self._make_order(monthly_product, qty=1)
+        order.action_confirm()
+        self.assertAlmostEqual(self._pending_cycles(line).amount, 999.0, places=2)
+
+        line.write({"product_id": quarterly_product.id, "price_unit": 300.0})
+
+        first_cycle = self._pending_cycles(line)
+        self.assertEqual(len(first_cycle), 1)
+        self.assertAlmostEqual(
+            first_cycle.amount, 300.0, places=2, msg="used to stay at 999.00"
+        )
+        billed_on = first_cycle.date
+
+        # ...and the cycle after it follows the new product's quarterly beat.
+        self.env["dealflow.billing.schedule"]._cron_generate_recurring_invoices()
+        self.assertAlmostEqual(first_cycle.invoice_id.amount_untaxed, 300.0, places=2)
+        next_cycle = self._pending_cycles(line)
+        self.assertEqual(next_cycle.date, billed_on + relativedelta(months=3))
+
+    def test_changing_a_plans_interval_recadences_live_subscriptions(self):
+        """An admin moving a plan from monthly to quarterly billing is a real
+        configuration change, and the subscriptions already running on that
+        plan have to follow it. Without this they keep their monthly next-bill
+        date and carry on invoicing every month on a quarterly plan."""
+        plan = self.env["dealflow.recurring.plan"].create(
+            {"name": "Re-cadenced Plan", "interval": "monthly"}
+        )
+        product = self._make_recurring_product("Re-cadenced Product", 400.0, plan=plan)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        self.env["dealflow.billing.schedule"]._cron_generate_recurring_invoices()
+        billed_on = line.billing_schedule_ids.filtered(
+            lambda s: s.state == "invoiced"
+        ).date
+        self.assertEqual(
+            self._pending_cycles(line).date, billed_on + relativedelta(months=1)
+        )
+
+        plan.interval = "quarterly"
+
+        self.assertEqual(
+            self._pending_cycles(line).date, billed_on + relativedelta(months=3)
+        )
+        self.assertEqual(
+            line.df_sub_next_bill_date, billed_on + relativedelta(months=3)
+        )
+
+    def test_swapping_in_a_one_time_product_stops_future_billing(self):
+        product = self._make_recurring_product("Ends Here Plan", 500.0)
+        one_time = self.env["product.product"].create(
+            {
+                "name": "One-Time Replacement",
+                "categ_id": self.services.id,
+                "type": "service",
+                "list_price": 500.0,
+            }
+        )
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        self.assertTrue(self._pending_cycles(line))
+
+        line.write({"product_id": one_time.id, "price_unit": 500.0})
+
+        self.assertEqual(line.df_sub_state, "cancelled")
+        self.assertFalse(self._pending_cycles(line))
+
+    def test_editing_before_the_first_cycle_bills_reprices_without_prorating(self):
+        """The other side of the re-sync: while the current cycle's invoice is
+        still PENDING, re-pricing that entry bills the change in full. Adding a
+        proration on top of it would charge the delta twice."""
+        product = self._make_recurring_product("Pre-Bill Plan", 200.0)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        # A cycle in progress, with its first invoice not yet raised.
+        line.df_sub_next_bill_date = line.df_sub_start_date + timedelta(days=15)
+
+        line.product_uom_qty = 3
+
+        self.assertFalse(line.billing_schedule_ids.filtered("df_is_proration"))
+        self.assertAlmostEqual(self._pending_cycles(line).amount, 600.0, places=2)

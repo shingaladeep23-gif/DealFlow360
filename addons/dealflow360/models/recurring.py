@@ -25,6 +25,15 @@ from odoo.exceptions import UserError
 DAYS_PER_INTERVAL = {"monthly": 30, "quarterly": 91, "yearly": 365}
 MONTHS_PER_INTERVAL = {"monthly": 1.0, "quarterly": 3.0, "yearly": 12.0}
 
+# Writing any of these on a live subscription line changes what it should bill
+# from here on, so the change has to reach the billing schedule - see
+# _df_resync_subscription. Only product_uom_qty used to be watched, which meant
+# every OTHER way of changing a subscription's value silently left the schedule
+# billing the old figure.
+BILLING_RELEVANT_FIELDS = frozenset(
+    {"product_id", "product_uom_qty", "price_unit", "discount", "tax_id", "product_uom"}
+)
+
 
 def _add_interval(date, interval):
     if interval == "monthly":
@@ -68,6 +77,29 @@ class DealflowRecurringPlan(models.Model):
         "subscription line on this plan is cancelled mid-cycle.",
     )
     active = fields.Boolean(default=True)
+
+    def write(self, vals):
+        """Moving a plan to a different billing interval is a real
+        configuration change, and the subscriptions already running on it have
+        to follow. Without this they keep the next-bill date they were given
+        under the old interval and carry on invoicing monthly on what is now a
+        quarterly plan - the schedule drifting away from its own configuration,
+        the same class of bug as a line edit never reaching the schedule.
+        """
+        recadence = "interval" in vals and any(
+            plan.interval != vals["interval"] for plan in self
+        )
+        res = super().write(vals)
+        if recadence:
+            live_lines = self.env["sale.order.line"].sudo().search(
+                [
+                    ("df_sub_state", "=", "active"),
+                    ("product_id.df_recurring_plan_id", "in", self.ids),
+                ]
+            )
+            for line in live_lines:
+                line._df_reschedule_for_new_interval()
+        return res
 
 
 class ProductTemplateRecurringPlan(models.Model):
@@ -253,12 +285,41 @@ class SaleOrderLineSubscription(models.Model):
             }
         )
 
-    def _df_prorate_quantity_change(self, old_qty, new_qty):
-        """AT-07: a mid-cycle quantity change produces correct proration.
-        Bills (or credits) only the remaining fraction of the current
-        cycle for the quantity delta, as an immediate extra schedule entry
-        - the next full-cycle invoice already reflects the new quantity via
-        price_subtotal, so this never double-bills the delta."""
+    def _df_unbilled_current_cycle_entry(self):
+        """The pending, non-proration entry that will bill the cycle we are
+        sitting inside, if it has not gone out yet.
+
+        This is what tells a schedule re-sync apart from a proration. If the
+        current cycle's invoice is still pending, simply re-pricing that entry
+        bills the change in full and correctly, and a proration on top of it
+        would charge the delta twice. Proration is only ever right when the
+        current cycle has ALREADY been invoiced at the old figure.
+        """
+        self.ensure_one()
+        if not self.df_sub_next_bill_date:
+            return self.env["dealflow.billing.schedule"]
+        return self.billing_schedule_ids.filtered(
+            lambda s: s.state == "pending"
+            and not s.df_is_proration
+            and s.date < self.df_sub_next_bill_date
+        )[:1]
+
+    def _df_prorate_amount_change(self, old_amount, new_amount, cycle_interval):
+        """AT-07: a mid-cycle change produces correct proration.
+
+        Bills (or credits) only the remaining fraction of the current cycle for
+        the DELTA IN BILLED AMOUNT, as an immediate extra schedule entry. It
+        used to take a quantity delta and re-derive the money from the line's
+        CURRENT unit price and discount, which meant it could only ever see a
+        quantity change - a price edit, a discount, or swapping the product for
+        one on a different price produced a delta of exactly zero and no
+        proration at all. Working in money covers all four.
+
+        `cycle_interval` is the interval the current cycle was SOLD on, which
+        is not necessarily the line's interval now: swapping a monthly product
+        for a quarterly one still has to prorate the remainder of the monthly
+        cycle the customer already paid for.
+        """
         self.ensure_one()
         plan = self.product_id.df_recurring_plan_id
         if (
@@ -271,12 +332,15 @@ class SaleOrderLineSubscription(models.Model):
         today = fields.Date.context_today(self)
         next_bill = self.df_sub_next_bill_date
         if today >= next_bill:
-            return  # the next invoice will already reflect the new quantity
-        cycle_days = DAYS_PER_INTERVAL.get(plan.interval, 30)
+            return  # the next invoice will already reflect the new amount
+        if self._df_unbilled_current_cycle_entry():
+            # This cycle has not been invoiced yet; _df_resync_pending_entries
+            # re-prices it in full. See that method's docstring.
+            return
+        cycle_days = DAYS_PER_INTERVAL.get(cycle_interval, 30)
         remaining_days = (next_bill - today).days
         remaining_fraction = min(1.0, max(0.0, remaining_days / float(cycle_days)))
-        unit_price = self.price_unit * (1 - (self.discount or 0.0) / 100.0)
-        delta_amount = unit_price * (new_qty - old_qty) * remaining_fraction
+        delta_amount = (new_amount - old_amount) * remaining_fraction
         if abs(delta_amount) < 0.005:
             return
         self.env["dealflow.billing.schedule"].sudo().create(
@@ -291,33 +355,125 @@ class SaleOrderLineSubscription(models.Model):
         )
         self.order_id.message_post(
             body=_(
-                "Mid-cycle quantity change on %(product)s (%(old)s -> "
-                "%(new)s): prorated %(amount).2f for the remaining "
-                "%(days)d day(s) of the current cycle."
+                "Mid-cycle change on %(product)s (%(old).2f -> %(new).2f per "
+                "cycle): prorated %(amount).2f for the remaining %(days)d "
+                "day(s) of the current cycle."
             )
             % {
                 "product": self.product_id.display_name,
-                "old": old_qty,
-                "new": new_qty,
+                "old": old_amount,
+                "new": new_amount,
                 "amount": delta_amount,
                 "days": remaining_days,
             }
         )
 
+    def _df_resync_pending_entries(self):
+        """Re-price every not-yet-invoiced cycle to what the line bills NOW.
+
+        This is the half of a subscription edit that was missing entirely. A
+        schedule entry stores its own `amount`, snapshotted from
+        price_subtotal when the entry was queued, and nothing ever revisited
+        it - so changing a live subscription updated the order line and left
+        the schedule (and therefore the invoice the cron actually raises)
+        billing the superseded figure forever. Live-reproduced: quantity 2 -> 5
+        on a 999.00/month line correctly prorated the current cycle, and then
+        every cycle from the next one onward still invoiced 2 x 999 rather
+        than 5 x 999 - a silent under-bill of 2,997.00 a month with no error
+        anywhere.
+
+        Only PENDING, non-proration entries are touched. An invoiced entry is
+        billing history and is never rewritten; a proration entry is a one-off
+        settlement of a past delta, not a cycle.
+        """
+        self.ensure_one()
+        pending = self.billing_schedule_ids.filtered(
+            lambda s: s.state == "pending" and not s.df_is_proration
+        )
+        stale = pending.filtered(
+            lambda s: abs(s.amount - self.price_subtotal) >= 0.005
+        )
+        if stale:
+            # sudo(): the schedule is engine-owned (see _df_start_subscription).
+            # A rep editing their own quotation must not need write access to it.
+            stale.sudo().write({"amount": self.price_subtotal})
+
+    def _df_reschedule_for_new_interval(self):
+        """The product on a live subscription moved to a different cadence
+        (monthly -> quarterly, say). The queued next bill date was computed on
+        the OLD interval, so re-derive it from the last period actually billed
+        - otherwise a quarterly plan carries on invoicing monthly."""
+        self.ensure_one()
+        plan = self.product_id.df_recurring_plan_id
+        last_billed = self.billing_schedule_ids.filtered(
+            lambda s: s.state == "invoiced" and not s.df_is_proration
+        ).sorted("date", reverse=True)[:1]
+        if not plan or not last_billed:
+            # Nothing billed yet: the queued entry is the FIRST cycle and is
+            # due when it is due. Only its amount needs correcting, which
+            # _df_resync_pending_entries does.
+            return
+        next_date = _add_interval(last_billed.date, plan.interval)
+        self.df_sub_next_bill_date = next_date
+        pending = self.billing_schedule_ids.filtered(
+            lambda s: s.state == "pending" and not s.df_is_proration
+        )
+        if pending:
+            pending.sudo().write({"date": next_date})
+
+    def _df_resync_subscription(self, before):
+        """Bring the billing schedule back in step with the line after a
+        billing-relevant edit. `before` is the snapshot taken in write()."""
+        self.ensure_one()
+        if self.df_sub_state != "active":
+            return
+        if not self.product_id.df_is_recurring:
+            # Swapped for a one-off product: the subscription is over. Future
+            # cycles must stop, and the order's own Create Invoice button now
+            # (correctly) picks the line up instead.
+            self.billing_schedule_ids.filtered(
+                lambda s: s.state == "pending"
+            ).sudo().write({"state": "cancelled"})
+            self.write({"df_sub_state": "cancelled"})
+            self.order_id.message_post(
+                body=_(
+                    "%s is no longer a recurring product on this order - "
+                    "future billing cycles have been cancelled."
+                )
+                % self.product_id.display_name
+            )
+            return
+        # Prorate FIRST, against the cycle the customer actually bought, then
+        # re-date and re-price what is still queued.
+        self._df_prorate_amount_change(
+            before["amount"], self.price_subtotal, before["interval"]
+        )
+        if self.product_id.df_recurring_plan_id.interval != before["interval"]:
+            self._df_reschedule_for_new_interval()
+        self._df_resync_pending_entries()
+
     def write(self, vals):
-        old_qty = {}
-        if "product_uom_qty" in vals:
-            old_qty = {
-                line.id: line.product_uom_qty
-                for line in self
-                if line.df_sub_state == "active"
-            }
+        before = {}
+        if BILLING_RELEVANT_FIELDS & set(vals):
+            for line in self:
+                if line.df_sub_state == "active":
+                    plan = line.product_id.df_recurring_plan_id
+                    before[line.id] = {
+                        "amount": line.price_subtotal,
+                        "interval": plan.interval if plan else "monthly",
+                    }
         res = super().write(vals)
         for line in self:
-            if line.id in old_qty and line.product_uom_qty != old_qty[line.id]:
-                line._df_prorate_quantity_change(
-                    old_qty[line.id], line.product_uom_qty
+            snapshot = before.get(line.id)
+            if snapshot and (
+                abs(line.price_subtotal - snapshot["amount"]) >= 0.005
+                or not line.product_id.df_is_recurring
+                or (
+                    line.product_id.df_recurring_plan_id.interval
+                    != snapshot["interval"]
                 )
+            ):
+                line._df_resync_subscription(snapshot)
         return res
 
     def action_pause_subscription(self):
