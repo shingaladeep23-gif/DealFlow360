@@ -57,6 +57,54 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-014 / DF-016 (first pass) — Portal foundation, negotiation model, isolation tests — Pam — 2026-09-05
+
+**Completed work**
+- `dealflow.negotiation` model (`models/negotiation.py`): `order_id`, `state` (proposed/applied/requires_reapproval/rejected), `counter_discount`, `risk_level_before/after`, `applied_by_id`; inherits `mail.thread` directly instead of a separate `.message` model (DEC-016 - `message_ids` in architecture.md's table is native chatter, not a bespoke model). `_apply()` writes the flat counter-discount % onto every discountable line via a plain `write()` and reads back `order.df_risk_level` — it never reimplements Atlas's DF-002/DF-003 ceiling/excess/risk math (DEC-017).
+- DEC-012's portal isolation rule, implemented: a **global** `ir.rule` on `sale.order` (`partner_id child_of user.commercial_partner_id`, read-only) plus the same pattern on `dealflow.negotiation`. Explicit portal-group ACL rows added for both models (read-only) and full/appropriate CRUD for the internal DealFlow groups.
+- `controllers/portal.py` (`DealflowPortal(CustomerPortal)`): genuinely separate routes (not the native sale-portal quote/order screens) — `/my/quotations` (list), `/my/quotation/<id>` (detail), and POST `/comment`, `/counter`, `/confirm`. Every route re-resolves the record through the *non-sudo* env first (`check_access_rights`/`check_access_rule`) so the DEC-012 rule is actually exercised per request, sudo-ing only after that check passes — mirrors Odoo's own `_document_check_access` pattern. The detail GET route deliberately lets `AccessError`/`MissingError` propagate (→ 403/404) rather than redirecting, per AT-08's literal wording.
+- `views/portal_templates.xml`: bespoke Bootstrap templates for the list/detail screens (status badge, line table, counter-discount form, negotiation history, comment form with a line picker) — exposes only lines/totals/status/comments/counter-discount/confirm, never margin/risk score/approval internals (AT-08).
+- Comments/change-requests use the **order's own native chatter** (`sale.order` already has `mail.thread`), tagged with the target line's name in the body — no new model needed for this either.
+- Confirm route blocks portal confirmation whenever `df_risk_level != 'none'` or an open `requires_reapproval` negotiation exists, posting an audit note; this is an interim gate until Atlas's DF-004 approval chain exists to hook into properly (DF-015 is `⛔`, tracked in `docs/task_plan.md`).
+- Tests: `tests/test_portal_isolation.py` (DF-016) proves cross-customer denial **at the ORM level** — `search`, `search_read`, `browse().read()`, and a write attempt — for two portal users linked to the seeded Acme/Beta partners, per DEC-012's explicit requirement not to rely on the HTTP route alone. `tests/test_negotiation.py` (DF-014) covers the within-ceiling and over-ceiling (`requires_reapproval`) counter-discount paths against the real Setup-Service worked example, the chatter audit post, and the no-lines guard.
+- DEC-016 (chatter instead of a separate message model) and DEC-017 (single flat counter-discount %, not per-line) added to `docs/decisions.md`.
+
+**Important files**
+- `addons/dealflow360/models/negotiation.py`, `models/__init__.py`
+- `addons/dealflow360/controllers/__init__.py`, `controllers/portal.py`
+- `addons/dealflow360/views/portal_templates.xml`
+- `addons/dealflow360/security/dealflow_security.xml`, `security/ir.model.access.csv`
+- `addons/dealflow360/tests/test_portal_isolation.py`, `tests/test_negotiation.py`
+- `docs/decisions.md` (DEC-016, DEC-017)
+
+**Current state**
+- Committed and pushed to `main` (`fefe9fc`, `34be97b`). Concurrent-mode lane note: `dealflow.negotiation` sits in `models/` (nominally Atlas's lane under the new CONCURRENT WORKING rule) but was pre-assigned to Pam in architecture.md/ui_spec.md/task_plan.md before that rule existed; flagged to Michael via hive message before touching it, proceeded since it's a net-new file with a single appended import line and no edits to Atlas's existing model files. Same reasoning for `views/portal_templates.xml` (new file, not touching Kevin's existing views).
+- **Not verified live.** Docker's daemon socket is not reachable from this agent's sandbox (`permission denied` on `unix:///Users/jeelaghera/.docker/run/docker.sock`) and Atlas owns the shared stack lifecycle per the concurrency rules, so no live install/upgrade or portal click-through has been run yet. Verified statically only: `py_compile` on every new/changed `.py` file, `xml.dom.minidom.parse` on the new XML, and manual review of the CSV column count.
+
+**Dependencies**
+- DF-015 (automatic reapproval + full customer confirmation) needs Atlas's DF-004 (`dealflow.approval`) to exist — the portal-side interim gate here should be replaced with a real reapproval-chain trigger once DF-004 lands, not layered on top of it.
+- DF-007 (end-to-end QA of the vertical slice) still lists DF-014 as a dependency; this pass should unblock that once DF-004 also lands.
+
+**Known issues**
+- `action_confirm()` in the confirm route runs under `sudo()` (as is standard for portal-mediated native workflow actions), so the resulting `sale.order` state change is attributed to whichever user's session performed the sudo call, not a distinct "confirmed by customer" record — there is no field for that in the current schema. Acceptable for now; flagging in case DF-015/DF-020 want an explicit "customer-confirmed" audit trail.
+- Live server-log/browser-console verification (module upgrade, `/my/quotations` and `/my/quotation/<id>` click-through, counter-discount submit, isolation attack via URL manipulation) is still outstanding — first thing to do once the shared Odoo stack is available and DF-014 is picked back up.
+
+**Remaining work**
+- Live verification once Docker/Atlas's stack is reachable: install/upgrade, run the full test suite (`test_portal_isolation.py`, `test_negotiation.py`) under the Odoo test runner, and a manual portal click-through as two different portal users to confirm the 403/404 behavior in the browser, not just the ORM.
+- DF-015's real reapproval-chain hook once DF-004 lands.
+- Line-level comments currently tag the line in the chatter message body only — consider a dedicated `dealflow.negotiation`-linked comment view in the backend (Screen 11's "optional read-only panel" in `docs/ui_spec.md`) if Michael wants reps to see this without opening chatter — not required by AT-08 as written.
+
+**Recommended next task**
+- Once Atlas's DF-004 lands: wire `dealflow.negotiation`'s `requires_reapproval` state into a real `dealflow.approval` record (completes DF-015), then run DF-007's full vertical-slice QA pass, which also re-verifies the still-open DEC-014/DEC-015 findings.
+
+**Tests performed**
+- `python -m py_compile` on every new/changed `.py` file under `addons/dealflow360/` — all pass.
+- `xml.dom.minidom.parse` on `security/dealflow_security.xml` and `views/portal_templates.xml` — both well-formed.
+- Manual column-count check on `security/ir.model.access.csv` (8 columns per row, matches header) after appending new rows.
+- Could **not** run: module install/upgrade, the new Odoo test suites under the real test runner, or any browser-based check — all require the shared Docker stack, unreachable from this sandbox (see Known issues).
+
+---
+
 ## DF-000b — Resumption audit: repository state vs. previous-team claims — Michael — 2026-09-05
 
 **Completed work**

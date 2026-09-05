@@ -47,9 +47,9 @@
 ## Phase 7 — Customer Portal / Negotiation
 | ID | Task | Agent | Status |
 |---|---|---|---|
-| DF-014 | Portal controllers, negotiation model, counter-discount, record rules | Pam | ⬜ |
-| DF-015 | Automatic reapproval on renegotiated terms + customer confirmation | Pam | ⬜ |
-| DF-016 | Portal authorization/isolation test suite (cross-customer access must fail) | Pam | ⬜ |
+| DF-014 | Portal controllers, negotiation model, counter-discount, record rules | Pam | 🔄 |
+| DF-015 | Automatic reapproval on renegotiated terms + customer confirmation | Pam | ⛔ (needs Atlas's DF-004 approval chain; portal-side confirm blocking already lands with DF-014) |
+| DF-016 | Portal authorization/isolation test suite (cross-customer access must fail) | Pam | 🔄 |
 
 ## Phase 8 — Deal Health / Reporting
 | ID | Task | Agent | Status |
