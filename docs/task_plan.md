@@ -22,27 +22,27 @@
 |---|---|---|---|
 | DF-003 | Blended risk scoring engine per DEC-003 + backend unit tests | Atlas | ⬜ |
 | DF-004 | Approval chain (`dealflow.approval`, steps, routing) + audit log | Atlas | ⬜ |
-| DF-005 | Sales Workspace: dashboard, quotation list/pipeline, quotation builder UI | Don | ⬜ |
-| DF-006 | Approval list + approval detail UI with risk gauge and approval timeline | Don | ⬜ |
+| DF-005 | Sales Workspace: dashboard, quotation list/pipeline, quotation builder UI | Don | ⬜ (design spec ready, see `docs/ui_spec.md`; code blocked on DF-002/003/004 + Docker) |
+| DF-006 | Approval list + approval detail UI with risk gauge and approval timeline | Don | ⬜ (design spec ready, see `docs/ui_spec.md`; blocked on DF-004) |
 | DF-007 | QA the full slice: login → quote → over-limit discount → auto-routing → approve | Pam | ⬜ |
 
 ## Phase 4 — Upsell / Cross-sell
 | ID | Task | Agent | Status |
 |---|---|---|---|
 | DF-008 | Deterministic recommendation engine + `dealflow.upsell.rule` | Atlas | ⬜ |
-| DF-009 | Upsell panel OWL component with live margin delta | Don | ⬜ |
+| DF-009 | Upsell panel OWL component with live margin delta | Don | ⬜ (design spec ready, see `docs/ui_spec.md`; blocked on DF-008) |
 
 ## Phase 5 — Warehouse Fulfillment
 | ID | Task | Agent | Status |
 |---|---|---|---|
 | DF-010 | Allocation engine per DEC-006, split model, real pickings, backorders | Atlas | ⬜ |
-| DF-011 | Fulfillment list + split detail UI, accept/override, consolidate backorder | Don | ⬜ |
+| DF-011 | Fulfillment list + split detail UI, accept/override, consolidate backorder | Don | ⬜ (design spec ready, see `docs/ui_spec.md`; blocked on DF-010; needs new shipping-cost field, see spec Summary 1 #5) |
 
 ## Phase 6 — Hybrid Billing / Subscriptions
 | ID | Task | Agent | Status |
 |---|---|---|---|
 | DF-012 | Recurring plans, billing schedule → real `account.move`, proration, credit notes | Atlas | ⬜ |
-| DF-013 | Subscriptions list, billing detail, invoices list/detail UI | Don | ⬜ |
+| DF-013 | Subscriptions list, billing detail, invoices list/detail UI | Don | ⬜ (design spec ready, see `docs/ui_spec.md`; Invoices screens are pure-native and can start before DF-012; Subscriptions list needs a subscription-aggregate decision, see spec Summary 1 #7) |
 
 ## Phase 7 — Customer Portal / Negotiation
 | ID | Task | Agent | Status |
@@ -55,7 +55,7 @@
 | ID | Task | Agent | Status |
 |---|---|---|---|
 | DF-017 | Health scoring per DEC-005, anomaly detection, cron | Atlas | ⬜ |
-| DF-018 | Deal Health dashboard + reporting screen with filters and export | Don | ⬜ |
+| DF-018 | Deal Health dashboard + reporting screen with filters and export | Don | ⬜ (design spec ready, see `docs/ui_spec.md`; blocked on DF-017; needs per-signal health fields, see spec Summary 1 #9-11) |
 
 ## Phase 9 — Integration & Final QA
 | ID | Task | Agent | Status |

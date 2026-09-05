@@ -6,6 +6,42 @@ Required fields: completed work · important files · current state · dependenc
 
 ---
 
+## DF-005a — UI specification: 18 mockup screens → Odoo views — Don — 2026-09-05
+
+**Completed work**
+- `docs/ui_spec.md`: a screen-by-screen specification for all 18 `Mockup.jpeg` screens. Cropped and upscaled each screen from the mockup individually (via PIL) to read fine text that wasn't legible at full-image resolution. For each screen: model, view type + rationale, every field with EXISTS / COMING `<task-id>` / MISSING status, actions/buttons and what they trigger, owning menu, and owner (Don vs. Pam for the portal screen).
+- Two summary sections: (1) a precise, ranked list of backend fields/methods needed from Atlas that don't exist in `docs/architecture.md` yet, (2) a proposed implementation order for Don's own tasks (DF-005, DF-006, DF-009, DF-011, DF-013, DF-018) respecting the vertical-slice priority (quotation builder → risk display → approval UI) before dashboards/reporting polish.
+- Flagged 5 mockup-vs-architecture conflicts for Michael, most notably: Screen 3's Kanban pipeline has no backing field (needs new `sale.order.df_pipeline_stage`); Screen 9 (Subscriptions) has no backing "subscription" aggregate model; Screen 14 (Deal Health) needs DEC-005's four signals exposed individually, not just the blended score; Screen 17's per-tier "Price Rules" table implies a second pricing mechanism distinct from the existing discount-ceiling system; Screen 18's routing-table panel implies DEC-003's thresholds are editable data when they're currently code constants.
+- This was a **design-only task** per explicit instruction from god — Odoo/Docker is still down on this machine (see DF-001 entry below), so no XML/OWL/JS was written; writing unverifiable view code would risk stacking up install failures.
+
+**Important files**
+- `docs/ui_spec.md` (new) — the full specification, the durable output of this task.
+- `docs/task_plan.md` — annotated DF-005/006/009/011/013/018 rows with "design spec ready" notes and their specific blockers/field asks, without changing their ⬜ status (no code was written).
+
+**Current state**
+- Committed and pushed to `main`: `2de1e10` (ui_spec.md), plus this handoff/task_plan update.
+- No `addons/` files were touched, per task boundaries.
+
+**Dependencies**
+- DF-005/006/009/011/013/018 implementation depends on: this spec (done) + the corresponding Atlas backend tasks (DF-002/003/004/008/010/012/017) + a working Docker/Odoo instance (currently blocked, see DF-001 entry) + resolution of the open architecture questions listed in `docs/ui_spec.md` Summary 1 and "Mockup vs. architecture conflicts".
+
+**Known issues**
+- Two mockup table cells (Screen 7's 4th "why flagged" column header, Screen 9's create-button label) were only partially legible even after upscaling — documented as best-guess with an explicit note to confirm wording with Michael/Atlas rather than asserting them as fact.
+- Screen 11 (Customer Portal Negotiation) was deliberately not specified beyond a one-paragraph note — it's Pam's screen (DF-014).
+
+**Remaining work**
+- Route `docs/ui_spec.md` Summary 1's field list to Atlas so DF-002/003/004/008/010/012/017 can include the needed fields as they're built, rather than Don discovering gaps mid-implementation.
+- Get Michael's decisions on the 3 open architecture questions (subscription aggregate, tiered pricing mechanism, DEC-003 threshold configurability) before DF-013/017 land, since they change what Don builds for Screens 9, 17, 18.
+- Once Docker/Odoo is live and DF-002/003/004 exist, implement DF-005b (Quotation Detail) first per the proposed order in `docs/ui_spec.md` Summary 2.
+
+**Recommended next task**
+- Atlas: DF-002 (sale.order/line governance fields) is still the critical path — nothing in DF-005 can be implemented (only specified) until it lands. Michael: resolve the 3 flagged architecture questions whenever convenient, ideally before DF-012/017.
+
+**Tests performed**
+- None applicable (documentation-only task, no code). Verified `docs/ui_spec.md` covers all 18 screens against the mockup crops and cross-referenced every field name against `docs/architecture.md` §3 for accuracy before marking EXISTS/COMING.
+
+---
+
 ## DF-001 — Phase 1: Odoo Foundation — Atlas — 2026-09-05
 
 **Completed work**
