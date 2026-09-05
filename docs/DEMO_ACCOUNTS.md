@@ -8,13 +8,19 @@ return in theory.
 
 ## Internal users
 
-| Role | Login | Password | Sees quotations | Sees approvals | Sees tiers |
+| Role | Login | Password | Sees quotations | Approvals | Tiers |
 |---|---|---|---|---|---|
-| Superuser / Administrator | `admin` | `admin` | 4 | 2 | 3 |
-| DealFlow Admin — *Aditi Admin* | `df.admin` | `dealflow360` | 4 | 2 | 3 |
-| Sales Manager — *Marcus Sales Mgr* | `df.manager` | `dealflow360` | 4 | 2 | 3 |
-| Finance — *Fiona Finance* | `df.finance` | `dealflow360` | 4 | 2 | 3 |
-| Sales Rep — *Riya Sales Rep* | `df.rep` | `dealflow360` | **0** ⚠️ | 2 | 3 |
+| Superuser / Administrator | `admin` | `admin` | 4 — all | 2 | 3 |
+| DealFlow Admin — *Aditi Admin* | `df.admin` | `dealflow360` | 4 — all | 2 | 3 |
+| Sales Manager — *Marcus Sales Mgr* | `df.manager` | `dealflow360` | 4 — all | 2 | 3 |
+| Finance — *Fiona Finance* | `df.finance` | `dealflow360` | 4 — all | 2 | 3 |
+| Sales Rep — *Riya Sales Rep* | `df.rep` | `dealflow360` | **3 — own only** (S00001, S00003, S00016) | 2 | 3 |
+
+**The access model demonstrates itself.** Log in as `df.rep` and then as
+`df.manager` on the same screen: the rep sees only the three deals they own,
+the manager sees the whole pipeline including S00002 (owned by the manager).
+That contrast is worth showing an evaluator — it is Odoo's native ownership
+rule doing real work, not a cosmetic filter.
 
 ## Portal (customer) users
 
@@ -28,22 +34,24 @@ Cross-customer isolation is real: Acme cannot see Beta's deal and vice versa.
 
 ---
 
-## ⚠️ Known issue: Sales Rep sees 0 quotations
+## Salesperson ownership (resolved)
 
-This is **native Odoo behaviour, not a DealFlow360 bug**. `group_dealflow_sales_rep`
-implies `sales_team.group_sale_salesman`, whose record rule is *"Personal Orders"* —
-a salesperson sees only orders where they are the `user_id`. All demo orders were
-created by `admin`, so Riya legitimately sees none.
+`df.rep` originally saw **0** quotations: `group_dealflow_sales_rep` implies
+`sales_team.group_sale_salesman`, whose native *Personal Orders* rule shows only
+orders where the user is the salesperson — and every seeded order belonged to
+`admin`. That was native Odoo behaviour, not a DealFlow360 bug.
 
-Two honest ways to fix it, depending on what you want to show:
+Resolved as **demo data, not a security change**: the deals were assigned to
+realistic owners.
 
-1. **Assign demo deals to the rep** — set `user_id` on some orders to `df.rep`.
-   Most realistic: the rep owns their pipeline.
-2. **Grant `sales_team.group_sale_salesman_all_leads`** to the rep group — every
-   rep sees all orders. Simpler, but weakens the ownership story.
+| Order | Salesperson |
+|---|---|
+| S00001 | Riya Sales Rep |
+| S00003 | Riya Sales Rep |
+| S00016 | Riya Sales Rep |
+| S00002 | Marcus Sales Mgr |
 
-I have **not** applied either, because it changes the security model and that is
-your call.
+The record rule itself was left untouched, so the ownership model is still real.
 
 ---
 
