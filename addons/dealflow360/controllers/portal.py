@@ -157,25 +157,20 @@ class DealflowPortal(CustomerPortal):
         order_sudo = self._dealflow_document_check_access(order_id, access_token)
         if order_sudo.state not in ("draft", "sent"):
             return request.redirect(f"/my/quotation/{order_sudo.id}")
-        pending_negotiation = request.env["dealflow.negotiation"].sudo().search(
-            [("order_id", "=", order_sudo.id), ("state", "=", "requires_reapproval")],
-            limit=1,
-        )
-        if pending_negotiation or order_sudo.df_risk_level != "none":
-            # DF-004's approval chain will replace this flag once it lands
-            # (task_plan.md DF-015) - until then a flagged order cannot be
-            # customer-confirmed straight from the portal.
-            order_sudo.message_post(
-                body=_(
-                    "Customer attempted to confirm from the portal while this "
-                    "quotation is flagged %s risk; blocked pending manager "
-                    "approval."
-                )
-                % order_sudo.df_risk_level
-            )
-            return request.redirect(f"/my/quotation/{order_sudo.id}")
+        # DF-015: sale.order.action_confirm (models/sale_order.py) is now the
+        # single source of truth for whether a flagged order may confirm -
+        # it checks df_approval_id.state directly (approved -> proceeds,
+        # pending -> raises). A pre-check here on df_risk_level/negotiation
+        # history was wrong: risk level and the negotiation record's state
+        # don't reset once a chain is approved, so that gate blocked
+        # confirmation forever even after manager+finance approval.
         try:
             order_sudo.action_confirm()
-        except UserError:
-            pass
+        except UserError as exc:
+            order_sudo.message_post(
+                body=_(
+                    "Customer attempted to confirm from the portal: %s"
+                )
+                % str(exc)
+            )
         return request.redirect(f"/my/quotation/{order_sudo.id}")
