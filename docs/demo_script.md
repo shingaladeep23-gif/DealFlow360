@@ -177,6 +177,34 @@ Accepting the split (`action_confirm` on the split) creates one real
 
 ---
 
+## 3c. Billing — real posted invoices
+
+The database ships with **no chart of accounts**, which meant invoicing
+failed outright (`No journal could be found in company My Company for any of
+those types: sale`) and the Invoices screen was empty. The integrator loaded
+the generic chart (`generic_coa`, 47 accounts, a real *Customer Invoices*
+sale journal) and generated invoices through Odoo's native
+`_create_invoices()` — no shortcuts.
+
+| Invoice | Customer | State | Total | Payment |
+|---|---|---|---|---|
+| INV/2026/00001 | Acme Corp | posted | 38,040.00 | not paid |
+| INV/2026/00002 | Beta Industries | posted | 22,491.00 | not paid |
+
+**Worth pointing out in the demo:** Beta's invoice is **22,491** against a
+larger order, because the backordered units have not shipped. Fulfillment
+and billing are genuinely linked — the customer is billed for what was
+actually allocated, not what was ordered.
+
+Shown via **DealFlow360 › Invoices** (native `account.move` with the
+payment-status stepper widget).
+
+> **If you rebuild the database from scratch**, redo this step or the
+> Invoices screen will be empty and invoicing will error:
+> `env['account.chart.template'].try_loading('generic_coa', company=company, install_demo=False)`
+
+---
+
 ## 4. Honest status — what to say if asked
 
 **Working and demonstrable**
@@ -191,7 +219,7 @@ Accepting the split (`action_confirm` on the split) creates one real
 **Landed late in the sprint — verified by the integrator**
 - **Warehouse allocation, split fulfillment and backorders (DF-010/011)** —
   implemented and working against real stock. See §3b below.
-- **Hybrid recurring billing (DF-012)** — `dealflow.recurring.plan` and
+- **Hybrid recurring billing (DF-012)** — `dealflow.recurring.plan` (3 rows) and
   `dealflow.billing.schedule` models exist on `main` with a billing cron.
   *Models present and installing cleanly, but the billing cycle was NOT
   driven end-to-end by the integrator — do not demo it as proven.*
