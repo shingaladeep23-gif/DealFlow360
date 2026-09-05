@@ -69,7 +69,7 @@ Routing thresholds:
   - *Simple max-excess only* — rejected: ignores the explicitly-required blended/accumulation behaviour.
   - *Unweighted mean excess* — rejected: a single trivial line could dilute a large violation, and it treats a €200 line as equal to a €50 000 line.
   - *Total margin currency given away* — rejected: not comparable across order sizes, so fixed thresholds become meaningless.
-- **Status:** Accepted
+- **Status:** Accepted — but see **DEC-010**, which amends the routing thresholds from code constants to admin-configurable data. The formula and the 40 default are unchanged, so every worked example above still holds.
 
 ---
 
@@ -119,4 +119,54 @@ Buckets: **≥80 Healthy · 50–79 At Risk · <50 Critical**
 - **Decision:** Customer portal access is restricted primarily by an `ir.rule` on `sale.order` limiting portal users to their own `partner_id` (including child contacts), with controller-level token/ownership checks as a second layer.
 - **Reason:** The brief requires the portal be genuinely restricted, not a relabelled internal screen. Controller-only checks are bypassable through any other RPC path; a record rule is enforced by the ORM for every access path. Defence in depth.
 - **Alternatives considered:** Controller checks only — rejected: not a real security boundary. A fully separate application — rejected: discards native Odoo portal auth for no security gain.
+- **Status:** Accepted
+
+---
+
+## DEC-008 — Subscription lifecycle lives on `sale.order.line`, not a new model
+
+- **Date:** 2026-09-05
+- **Decision:** Mockup screen 9 (Subscriptions list) is backed by **`sale.order.line` extended with lifecycle fields** — `df_sub_state` (active/paused/cancelled), `df_sub_start_date`, `df_sub_next_bill_date`, `df_sub_end_date`, `df_mrr` (computed) — not by a new `dealflow.subscription` aggregate. Screen 9 is an act_window over `sale.order.line` filtered on `df_is_recurring = True`.
+- **Reason:** Raised by Don in DF-005a: the architecture modelled recurring *plans* and billing *events* but had nowhere to hold per-subscription state, so "cancel this subscription" had no home. That gap is real. But a new aggregate is the wrong fix here: `dealflow.billing.schedule` already keys on `order_line_id`, so the line is **already** the anchor for recurring behaviour, and in our scope one recurring order line *is* exactly one subscription (we do not renew into new orders). Extending the line satisfies CLAUDE.md's native-first rule, keeps one source of truth, and avoids a second record that could drift out of sync with the line it mirrors. Mid-cycle proration mutates line quantity, so state belongs beside quantity.
+- **Alternatives considered:** New `dealflow.subscription` model (Don's recommendation) — rejected: duplicates the order line's identity and adds a sync burden for no capability we need. Client-side `read_group` aggregation over billing schedules — rejected: derives state from invoice events, so a paused subscription with no pending rows becomes indistinguishable from a finished one, and it puts business meaning in the frontend.
+- **Status:** Accepted
+
+---
+
+## DEC-009 — Per-tier pricing uses native `product.pricelist`; it is NOT the discount-ceiling system
+
+- **Date:** 2026-09-05
+- **Decision:** Mockup screen 17's "Price Rules" table is implemented with **native `product.pricelist`**, one per customer tier, applied to customers via the native `res.partner.property_product_pricelist`. No new model.
+- **Reason:** Raised by Don in DF-005a as a possible conflict. It is not a conflict — it is a **second, separate requirement** we had not yet modelled. Problem statement §A2 explicitly requires "Price Lists: Customer tier based pricing, currency specific rules", and Odoo's pricelist engine already does tier- and currency-scoped pricing including percentage rules.
+
+  The two mechanisms compose and must not be confused:
+  - **Pricelist** sets the *base price* a tier pays (e.g. Gold sees list minus 10%).
+  - **Discount ceiling** (DEC-003) caps the *additional manual discount* a rep may apply on top of that price.
+
+  A line's `discount` percentage is therefore measured against the pricelist price, not the catalogue price. Implementations must not double-count the pricelist reduction as rep discount when computing `excess_i`.
+- **Alternatives considered:** A custom per-tier price-adjustment model — rejected: reimplements a mature native subsystem and forfeits currency rules, date validity and quantity breaks. Folding tier pricing into the ceiling system — rejected: conflates a pricing decision with a governance control, and would make rep discounts appear artificially large.
+- **Status:** Accepted
+
+---
+
+## DEC-010 — Approval routing thresholds are configurable data, not code constants (amends DEC-003)
+
+- **Date:** 2026-09-05
+- **Decision:** The MEDIUM/HIGH routing boundaries from DEC-003 are **admin-configurable** via native `res.config.settings` backed by `ir.config_parameter`:
+  - `dealflow.risk_high_min` — default **40** (score above this ⇒ HIGH ⇒ Sales Manager then Finance)
+  - MEDIUM is any score above zero and at or below that boundary; NONE remains structurally defined as "every line within its ceiling" and is **not** configurable.
+
+  The scoring *formula* itself stays in code. Only the routing boundary is data.
+- **Reason:** Raised by Don in DF-005a, who recommended keeping the thresholds static. **I overruled that recommendation**, because problem statement §A3 states the requirement directly: *"Configure approval chain: which discount range needs Sales Manager only, and which range needs Sales Manager followed by Finance."* That is an explicit configuration requirement, and DEC-003 as originally written under-delivered against it. Mockup screen 18 independently shows this panel with a "Save configuration" button, so both sources agree. `res.config.settings` is the native Odoo idiom for exactly this and costs almost nothing.
+- **Alternatives considered:** Hardcoded constants (original DEC-003, and Don's recommendation) — rejected: fails an explicit stated requirement. A full `dealflow.approval.rule` model with arbitrary bands — rejected: more machinery than the spec asks for; the spec describes two levels, not an arbitrary ladder.
+- **Status:** Accepted — supersedes the "thresholds are constants" reading of DEC-003. The formula and the 40 default are unchanged, so all DEC-003 worked examples still hold.
+
+---
+
+## DEC-011 — Deal health exposes its four signals individually, not only a blended score
+
+- **Date:** 2026-09-05
+- **Decision:** In addition to `df_health_score` / `df_health_status`, `sale.order` exposes `df_health_flags` (the four DEC-005 signals: stalled / discount_anomaly / approval_delay / delivery_risk), `df_health_reason` (human-readable text) and `df_health_flagged_date`.
+- **Reason:** Raised by Don in DF-005a. The problem statement's Deal Health dashboard requires *per-signal* alerts ("stalled deals", "discount anomaly alerts", "delivery promise slippage indicators") that are individually clickable, not a single opaque number. DEC-005 computed the four penalties internally but discarded which ones fired, which would have forced the frontend to re-derive them — violating the rule that business logic never lives in JavaScript.
+- **Alternatives considered:** Score only, with the frontend inferring cause — rejected: duplicates scoring logic client-side and cannot distinguish two deals with equal scores for different reasons.
 - **Status:** Accepted

@@ -45,11 +45,18 @@ addons/dealflow360/
 
 | Model | Added fields | Purpose |
 |---|---|---|
-| `res.partner` | `df_tier_id` → `dealflow.discount.tier` | customer tier (Bronze/Silver/Gold) |
+| `res.partner` | `df_tier_id` → `dealflow.discount.tier`; native `property_product_pricelist` set from the tier (DEC-009) | customer tier + tier pricing |
 | `product.category` | `df_max_discount` (float, %) | category discount ceiling |
-| `product.template` | `df_is_recurring`, `df_recurring_plan_id`, `df_is_promoted`, `df_min_margin` | subscription + upsell metadata |
-| `sale.order` | `df_blended_risk_score`, `df_risk_level`, `df_approval_id`, `df_margin_pct`, `df_health_score`, `df_health_status`, `df_last_activity` | governance + deal health |
-| `sale.order.line` | `df_effective_ceiling`, `df_excess_points`, `df_margin_pct` | per-line governance |
+| `product.template` | `df_is_recurring`, `df_recurring_plan_id` (added in DF-012), `df_is_promoted`, `df_min_margin` | subscription + upsell metadata |
+| `sale.order` | `df_blended_risk_score`, `df_risk_level`, `df_approval_id`, `df_margin_pct`, `df_pipeline_stage`, `df_health_score`, `df_health_status`, `df_health_flags`, `df_health_reason`, `df_health_flagged_date`, `df_last_activity` | governance, pipeline, deal health (DEC-011) |
+| `sale.order.line` | `df_effective_ceiling`, `df_excess_points`, `df_margin_pct`; subscription lifecycle `df_sub_state`, `df_sub_start_date`, `df_sub_next_bill_date`, `df_sub_end_date`, `df_mrr` (DEC-008) | per-line governance + subscription state |
+| `stock.warehouse` | `df_shipping_cost_weight` (float) | DEC-006 allocation tie-break |
+
+**Configuration (DEC-010):** `res.config.settings` + `ir.config_parameter` holds `dealflow.risk_high_min` (default 40) — the MEDIUM/HIGH routing boundary. The scoring formula stays in code; only the boundary is data.
+
+**Pricing vs governance (DEC-009):** `product.pricelist` sets the *base price* per tier; the discount ceiling caps the *additional manual discount* on top of it. A line's `discount` is measured against the pricelist price — never double-count the pricelist reduction as rep discount when computing `excess_i`.
+
+**Subscriptions (DEC-008):** there is no `dealflow.subscription` model. One recurring `sale.order.line` **is** one subscription; mockup screen 9 is an act_window over `sale.order.line` filtered on `df_is_recurring = True`.
 
 ### 3.2 Custom models
 
