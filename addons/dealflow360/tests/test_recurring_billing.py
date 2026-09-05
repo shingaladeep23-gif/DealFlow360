@@ -106,12 +106,55 @@ class TestRecurringBilling(TransactionCase):
         self.assertTrue(invoice)
         self.assertEqual(invoice.move_type, "out_invoice")
         self.assertEqual(invoice.state, "posted")
-        self.assertAlmostEqual(invoice.amount_total, 200.0, places=2)
+        # The schedule bills the line's untaxed subtotal; tax is carried
+        # through natively from the sale line's tax_ids, so amount_total is
+        # subtotal + tax and only amount_untaxed equals the billed amount.
+        self.assertAlmostEqual(invoice.amount_untaxed, 200.0, places=2)
+        self.assertAlmostEqual(
+            invoice.amount_total, invoice.amount_untaxed + invoice.amount_tax, places=2
+        )
+        self.assertEqual(invoice.invoice_line_ids.tax_ids, line.tax_id)
 
         # Next cycle's entry was queued exactly one month out.
         pending = line.billing_schedule_ids.filtered(lambda s: s.state == "pending")
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending.date.month, (first_date.month % 12) + 1)
+
+    def test_manual_invoice_now_queues_the_next_cycle_like_the_cron(self):
+        """The 'Generate Invoice Now' button must leave the subscription in
+        exactly the state the cron would have: invoiced, and renewed. It
+        previously called _create_invoice() directly and never queued the
+        following cycle, so invoicing from the UI stopped the subscription
+        dead."""
+        product = self._make_recurring_product("Manual Invoice Plan", 300.0)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        schedule = line.billing_schedule_ids
+        first_date = schedule.date
+
+        schedule.action_invoice_now()
+
+        schedule.invalidate_recordset()
+        self.assertEqual(schedule.state, "invoiced")
+        self.assertEqual(schedule.invoice_id.state, "posted")
+
+        pending = line.billing_schedule_ids.filtered(lambda s: s.state == "pending")
+        self.assertEqual(len(pending), 1, "manual invoicing must queue the next cycle")
+        self.assertEqual(pending.date.month, (first_date.month % 12) + 1)
+        self.assertEqual(line.df_sub_next_bill_date, pending.date)
+
+    def test_manual_invoice_now_cancels_entry_for_a_paused_line(self):
+        product = self._make_recurring_product("Manual Paused Plan", 120.0)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        schedule = line.billing_schedule_ids
+        line.df_sub_state = "paused"
+
+        schedule.action_invoice_now()
+
+        schedule.invalidate_recordset()
+        self.assertEqual(schedule.state, "cancelled")
+        self.assertFalse(schedule.invoice_id)
 
     def test_cron_skips_entries_not_yet_due(self):
         product = self._make_recurring_product("Future Plan", 150.0)

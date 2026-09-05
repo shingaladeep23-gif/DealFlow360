@@ -62,19 +62,45 @@ class TestApproval(TransactionCase):
         )
 
     def _expect_user_error(self, func, *args, **kwargs):
-        """Odoo's TransactionCase.assertRaises wraps the call in a cursor
-        savepoint that is rolled back once the exception is caught - correct
-        for asserting a DB constraint failure left no trace, but wrong here:
-        action_confirm() deliberately WRITES a real approval chain before
-        raising UserError, and self.assertRaises(UserError) would silently
-        erase that side effect, making every assertion on df_approval_id
-        afterward see nothing. Use a plain try/except instead so the routed
-        approval this test asserts on actually survives."""
+        """Assert a genuine block: the call raises UserError and there is no
+        state change worth keeping (a step acted on out of turn, a reject with
+        no reason, a confirm while a chain is still pending).
+
+        Uses a plain try/except rather than assertRaises because
+        TransactionCase.assertRaises rolls back to a savepoint, which would
+        also erase the approval chain these tests set up beforehand."""
         try:
             func(*args, **kwargs)
         except UserError:
             return
         self.fail("Expected a UserError to be raised")
+
+    def _confirm_expecting_routing(self, order):
+        """Assert the AT-04 routing contract: confirming an over-ceiling
+        quotation ROUTES it and PERSISTS that routing.
+
+        This deliberately does not accept a UserError. action_confirm used to
+        report routing by raising, which propagated out of the RPC call and
+        rolled the whole transaction back - live-verified: approvals count
+        unchanged, df_approval_id False, df_pipeline_stage still 'draft'. The
+        tests missed it only because catching the exception in-process leaves
+        the writes intact. It now returns a display_notification action and
+        the chain survives."""
+        result = order.action_confirm()
+        self.assertIsInstance(
+            result, dict, "routing must return a client action, never raise"
+        )
+        self.assertEqual(result.get("tag"), "display_notification")
+        self.assertNotEqual(order.state, "sale", "a routed order must not confirm")
+        self.assertTrue(
+            order.df_approval_id, "the routed approval chain must be persisted"
+        )
+        return result
+
+    def _confirm_expecting_block(self, order):
+        """Confirm is refused because a chain is still pending - a real
+        UserError, nothing to persist."""
+        self._expect_user_error(order.action_confirm)
 
     def _medium_risk_order(self):
         # Hardware ceiling 15%, single line at 20% -> excess 5, score 45*... let's
@@ -113,7 +139,7 @@ class TestApproval(TransactionCase):
 
     def test_medium_risk_creates_single_sales_manager_step(self):
         order = self._medium_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
 
         self.assertTrue(order.df_approval_id)
         self.assertEqual(order.df_approval_id.state, "pending")
@@ -126,7 +152,7 @@ class TestApproval(TransactionCase):
 
     def test_high_risk_creates_manager_then_finance_in_order(self):
         order = self._high_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
 
         steps = order.df_approval_id.step_ids.sorted("sequence")
         self.assertEqual(len(steps), 2)
@@ -139,7 +165,7 @@ class TestApproval(TransactionCase):
 
     def test_confirm_blocked_while_pending_then_allowed_once_approved(self):
         order = self._medium_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
 
         step = order.df_approval_id.step_ids
         step.with_user(self.manager_user).action_approve()
@@ -151,7 +177,7 @@ class TestApproval(TransactionCase):
 
     def test_high_risk_finance_step_blocked_until_manager_approves(self):
         order = self._high_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
         steps = order.df_approval_id.step_ids.sorted("sequence")
 
         self._expect_user_error(
@@ -161,7 +187,7 @@ class TestApproval(TransactionCase):
         steps[0].with_user(self.manager_user).action_approve()
         self.assertEqual(steps[1].state, "pending")
 
-        self._expect_user_error(order.action_confirm)  # finance hasn't acted yet
+        self._confirm_expecting_block(order)  # finance hasn't acted yet
 
         steps[1].with_user(self.finance_user).action_approve()
         self.assertEqual(order.df_approval_id.state, "approved")
@@ -170,7 +196,7 @@ class TestApproval(TransactionCase):
 
     def test_wrong_role_cannot_act_on_step(self):
         order = self._medium_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
         step = order.df_approval_id.step_ids
         self._expect_user_error(
             step.with_user(self.finance_user).action_approve
@@ -180,7 +206,7 @@ class TestApproval(TransactionCase):
 
     def test_reject_requires_reason_and_stops_confirm(self):
         order = self._medium_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
         step = order.df_approval_id.step_ids
 
         self._expect_user_error(step.with_user(self.manager_user).action_reject, False)
@@ -192,7 +218,7 @@ class TestApproval(TransactionCase):
 
     def test_request_revision_requires_reason(self):
         order = self._medium_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
         step = order.df_approval_id.step_ids
 
         self._expect_user_error(step.with_user(self.manager_user).action_request_revision, False)
@@ -203,11 +229,11 @@ class TestApproval(TransactionCase):
 
     def test_reconfirm_after_rejection_routes_a_fresh_chain(self):
         order = self._medium_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
         first_approval = order.df_approval_id
         first_approval.step_ids.with_user(self.manager_user).action_reject("No")
 
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
         self.assertNotEqual(order.df_approval_id.id, first_approval.id)
         self.assertEqual(order.df_approval_id.state, "pending")
 
@@ -215,7 +241,7 @@ class TestApproval(TransactionCase):
 
     def test_audit_trail_records_submit_approve_reject(self):
         order = self._medium_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
         step = order.df_approval_id.step_ids
         step.with_user(self.manager_user).action_approve("Looks fine")
 
@@ -231,7 +257,7 @@ class TestApproval(TransactionCase):
 
     def test_audit_log_is_read_only_for_sales_rep(self):
         order = self._medium_risk_order()
-        self._expect_user_error(order.action_confirm)
+        self._confirm_expecting_routing(order)
         log = self.env["dealflow.audit.log"].search([("order_id", "=", order.id)], limit=1)
         self.assertTrue(log)
         # Rep can read...
