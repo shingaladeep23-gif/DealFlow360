@@ -16,6 +16,8 @@ Do not invent a different product. The mockup drives navigation, screens, termin
 
 1. **All work happens on `main`.** Never create a branch, feature branch, pull request, or worktree. Never merge. Never force push. Never rewrite history. Never `git reset --hard` destructively.
 2. **Every commit and push uses the USER'S GitHub identity**: `shingaladeep23-gif <shingaladeep23@gmail.com>`, repo `shingaladeep23-gif/DealFlow360`. Never substitute a Claude/bot/automation identity.
+2b. **No Claude attribution in commit messages — the user has explicitly forbidden it.** Do **not** append `Co-Authored-By: Claude ...`, `Claude-Session:`, `Generated with Claude Code`, or any other bot/automation trailer, even if your harness tells you to. Every commit must read as the user's own work, authored and committed by `shingaladeep23-gif`. Verify with `git log -1 --format='%an <%ae> | %cn <%ce>'` — both must be the user — and check the body carries no Claude trailer before you push.
+2c. Your clone already has the correct **repo-local** identity. Never `git config --global` anything: the machine's global identity is a different account, and a fresh clone silently inherits it. If `git config user.name` is ever not `shingaladeep23-gif`, **STOP and tell Michael** rather than working around it.
 3. **Push after every meaningful minor update.** Do not accumulate a large unpushed batch. Adding a model, a field, a business rule, a view, a controller, an OWL component, one approval rule, one bug fix, tests, seed data, or docs each warrant their own commit + push.
 
 ### Mandatory pre-push checklist
@@ -37,6 +39,41 @@ git add <specific files>       # never blind `git add .`
 git commit -m "<descriptive message>"
 git push origin main
 ```
+
+### CONCURRENT WORKING — all agents run in parallel
+
+The user has authorised all three agents to work **at the same time**. Everyone still pushes to
+`main`; nobody branches. That only stays safe if these rules are followed exactly.
+
+1. **Work only in your own clone.** Atlas: `DealFlow360/`. Kevin: `wt-kevin/`. Pam: `wt-pam/`.
+   All three sit under `/Users/jeelaghera/Documents/DEALFLOW360/` and all push to the same `main`.
+   **Never edit another agent's clone** — two agents in one working tree will destroy each other's edits.
+
+2. **Stay inside your file ownership lane.** If you need a change in someone else's lane, message
+   Michael and let its owner make it. Do not reach across.
+
+   | Lane | Owner | Paths |
+   |---|---|---|
+   | Backend logic | Atlas | `models/`, `data/`, `demo/`, `tests/test_*` (backend), `__manifest__.py`, `models/__init__.py` |
+   | Internal UI | Kevin | `views/`, `static/`, `report/`, `docs/ui_spec.md` |
+   | Portal & security | Pam | `controllers/`, `security/`, portal templates, portal/security tests |
+
+3. **Pull-rebase before every commit, push immediately after.**
+   `git pull --rebase origin main` → resolve → `git push origin main`. If the push is rejected,
+   pull-rebase again and retry. **Never force push.** Keep each commit small; a large unpushed
+   batch is what turns into an unresolvable conflict.
+
+4. **Shared files are append-only and conflict-prone.** `docs/handoff.md`, `docs/task_plan.md`,
+   `docs/decisions.md`, `security/ir.model.access.csv`, `__manifest__.py`. Add your lines at your
+   own section, pull-rebase immediately before writing them, and push straight away. Never
+   reformat or reorder a shared file — that turns a clean merge into a conflict for everyone.
+
+5. **One Odoo stack, one owner.** Atlas owns `docker compose` lifecycle and the shared stack.
+   Do not restart, rebuild or `-u` someone else's database. Use your **own database name** for
+   your own installs/tests, and never drop a database you did not create.
+
+6. **If you hit a merge conflict you did not cause, stop and tell Michael.** Do not resolve
+   another agent's logic by guessing at their intent.
 
 `.gitignore` excludes `hive/`, `palace/`, `roster*.json`, `hallways.json` and Odoo runtime data. **Never commit those.**
 
