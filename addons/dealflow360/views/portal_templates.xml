@@ -64,8 +64,30 @@
             <t t-call="portal.portal_docs_entry">
                 <t t-set="title">Quotations</t>
                 <t t-set="url" t-value="'/my/quotations'"/>
-                <t t-set="placeholder_count" t-value="'quotation_count'"/>
+                <!-- Its OWN counter, not sale's `quotation_count`. Both cards
+                     used to read that one number while linking to lists with
+                     different domains, so at least one of them was always
+                     lying about how many rows the customer would find. See
+                     QUOTATION_FILTERS in controllers/portal.py. -->
+                <t t-set="placeholder_count" t-value="'df_quotation_count'"/>
             </t>
+        </xpath>
+    </template>
+
+    <!-- `sale`'s own "Quotations to review" alert on the portal home counts
+         `quotation_count` but links to /my/quotes, whose domain is
+         state == 'sent'. A quotation this product has not explicitly sent is
+         therefore counted and then not shown - the customer clicks a card
+         reading "3" and lands on an empty page. /my/quotations is this
+         module's equivalent screen (DEC-007) and it renders draft and sent
+         quotations alike, so the alert is re-pointed at it with the matching
+         filter rather than at a list that cannot contain what was counted.
+         Only the destination changes; the native card, its styling and its
+         count placeholder are left exactly as `sale` defines them. -->
+    <template id="portal_my_home_sale_quotations_url" name="Portal My Home: send the quotations alert to a list that matches its count"
+              inherit_id="sale.portal_my_home_sale">
+        <xpath expr="//t[@t-set='url'][@t-value=&quot;'/my/quotes'&quot;]" position="replace">
+            <t t-set="url" t-value="'/my/quotations?filterby=to_review'"/>
         </xpath>
     </template>
 

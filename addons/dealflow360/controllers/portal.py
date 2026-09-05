@@ -10,6 +10,20 @@ from odoo.addons.portal.controllers.portal import (
 
 QUOTATION_PAGE_SIZE = 20
 
+# What /my/quotations can be filtered down to, and the ONE definition each of
+# those filters has. The portal home counters below are computed from this same
+# dict, which is the whole point: a card that says "3" and a list that shows 0
+# rows is the bug this replaces, and it can only be fixed for good by making
+# the badge and the page read from a single source.
+#
+# "open" is a quotation the customer can still act on. A confirmed order is not
+# one (it is on "Your Orders"), and a cancelled one is not either.
+QUOTATION_FILTERS = {
+    "all": [("state", "!=", "cancel")],
+    "to_review": [("state", "in", ("draft", "sent"))],
+}
+DEFAULT_QUOTATION_FILTER = "all"
+
 # Genuinely separate from Odoo's native sale-portal quote/order screens
 # (DEC-007/architecture.md §6-7): dedicated routes and templates that expose
 # only what AT-08 allows (lines, totals, status, comments, counter-discount,
@@ -18,9 +32,34 @@ QUOTATION_PAGE_SIZE = 20
 
 class DealflowPortal(CustomerPortal):
     def _prepare_home_portal_values(self, counters):
+        """Portal home badge counts.
+
+        Both counters below used to be one line - `quotation_count =
+        search_count([])` - and that empty domain is the whole of bug "the
+        dashboard says 3 pending quotes but the page is empty". It counted
+        EVERY order the customer could see: confirmed ones, cancelled ones,
+        orders already listed under "Your Orders". Meanwhile `sale`'s own
+        "Quotations to review" alert reads this very counter and links to
+        /my/quotes, whose domain is state == 'sent' - so the badge and the
+        destination were counting two different things by construction and
+        could not agree. Live-reproduced: badge 18, page 1 row.
+
+        Each counter is now the search_count of exactly the domain the page it
+        links to will run (see QUOTATION_FILTERS), so the number on the card is
+        the number of rows behind it.
+        """
         values = super()._prepare_home_portal_values(counters)
+        Order = request.env["sale.order"]
+        # DEC-012's record rule already scopes these to the logged-in
+        # customer's own partner - no partner_id term needed or wanted.
         if "quotation_count" in counters:
-            values["quotation_count"] = request.env["sale.order"].search_count([])
+            values["quotation_count"] = Order.search_count(
+                QUOTATION_FILTERS["to_review"]
+            )
+        if "df_quotation_count" in counters:
+            values["df_quotation_count"] = Order.search_count(
+                QUOTATION_FILTERS["all"]
+            )
         return values
 
     def _dealflow_document_check_access(self, order_id, access_token=None):
@@ -73,15 +112,22 @@ class DealflowPortal(CustomerPortal):
         return "o_df_portal_badge_draft"
 
     @http.route(["/my/quotations", "/my/quotations/page/<int:page>"], type="http", auth="user", website=True)
-    def dealflow_portal_quotations(self, page=1, **kwargs):
+    def dealflow_portal_quotations(self, page=1, filterby=None, **kwargs):
         Order = request.env["sale.order"]
         # DEC-012's rule already scopes this search to the logged-in
         # customer's own partner (and child contacts) - no extra partner_id
         # domain needed or wanted here.
-        domain = [("state", "!=", "cancel")]
+        #
+        # filterby comes off the portal home cards. An unknown value falls back
+        # to "all" rather than erroring: it arrives from a URL the customer can
+        # edit.
+        if filterby not in QUOTATION_FILTERS:
+            filterby = DEFAULT_QUOTATION_FILTER
+        domain = QUOTATION_FILTERS[filterby]
         total = Order.search_count(domain)
         pager = portal_pager(
             url="/my/quotations",
+            url_args={"filterby": filterby},
             total=total,
             page=page,
             step=QUOTATION_PAGE_SIZE,
@@ -110,6 +156,7 @@ class DealflowPortal(CustomerPortal):
                 "pager": pager,
                 "page_name": "quotation",
                 "default_url": "/my/quotations",
+                "filterby": filterby,
             },
         )
 
