@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Root application menu -->
+    <menuitem id="menu_dealflow_root" name="DealFlow360" sequence="5"/>
+
+    <!-- Quotations: native sale.order, extended in later phases -->
+    <record id="action_dealflow_quotations" model="ir.actions.act_window">
+        <field name="name">Quotations</field>
+        <field name="res_model">sale.order</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('state', 'in', ('draft', 'sent'))]</field>
+    </record>
+    <menuitem id="menu_dealflow_dashboard" name="Dashboard" parent="menu_dealflow_root" sequence="10"/>
+    <menuitem id="menu_dealflow_quotations" name="Quotations" parent="menu_dealflow_root"
+              action="action_dealflow_quotations" sequence="20"/>
+    <menuitem id="menu_dealflow_approvals" name="Approvals" parent="menu_dealflow_root" sequence="30"/>
+    <menuitem id="menu_dealflow_fulfillment" name="Fulfillment" parent="menu_dealflow_root" sequence="40"/>
+    <menuitem id="menu_dealflow_subscriptions" name="Subscriptions" parent="menu_dealflow_root" sequence="50"/>
+    <menuitem id="menu_dealflow_invoices" name="Invoices" parent="menu_dealflow_root" sequence="60"/>
+    <menuitem id="menu_dealflow_deal_health" name="Deal Health" parent="menu_dealflow_root" sequence="70"/>
+    <menuitem id="menu_dealflow_reports" name="Reports" parent="menu_dealflow_root" sequence="80"/>
+    <menuitem id="menu_dealflow_products" name="Products" parent="menu_dealflow_root"
+              action="action_dealflow_product_template" sequence="90"/>
+
+    <!-- Configuration (admin only): verify DF-001 seed models in the UI -->
+    <menuitem id="menu_dealflow_configuration" name="Configuration" parent="menu_dealflow_root"
+              groups="group_dealflow_admin" sequence="100"/>
+    <menuitem id="menu_dealflow_discount_tiers" name="Discount Tiers" parent="menu_dealflow_configuration"
+              action="action_dealflow_discount_tier" sequence="10"/>
+    <menuitem id="menu_dealflow_category_limits" name="Category Limits" parent="menu_dealflow_configuration"
+              action="action_dealflow_category_limit" sequence="20"/>
+</odoo>

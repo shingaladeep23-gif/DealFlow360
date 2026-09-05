@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="discount_tier_bronze" model="dealflow.discount.tier">
+            <field name="name">Bronze</field>
+            <field name="max_discount">5.0</field>
+        </record>
+        <record id="discount_tier_silver" model="dealflow.discount.tier">
+            <field name="name">Silver</field>
+            <field name="max_discount">10.0</field>
+        </record>
+        <record id="discount_tier_gold" model="dealflow.discount.tier">
+            <field name="name">Gold</field>
+            <field name="max_discount">15.0</field>
+        </record>
+    </data>
+</odoo>

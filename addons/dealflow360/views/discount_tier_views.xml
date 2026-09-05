@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- dealflow.discount.tier -->
+    <record id="view_dealflow_discount_tier_tree" model="ir.ui.view">
+        <field name="name">dealflow.discount.tier.tree</field>
+        <field name="model">dealflow.discount.tier</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="max_discount"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_dealflow_discount_tier_form" model="ir.ui.view">
+        <field name="name">dealflow.discount.tier.form</field>
+        <field name="model">dealflow.discount.tier</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="max_discount"/>
+                    </group>
+                    <notebook>
+                        <page string="Customers">
+                            <field name="partner_ids" readonly="1">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="email"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_dealflow_discount_tier" model="ir.actions.act_window">
+        <field name="name">Discount Tiers</field>
+        <field name="res_model">dealflow.discount.tier</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- dealflow.category.limit -->
+    <record id="view_dealflow_category_limit_tree" model="ir.ui.view">
+        <field name="name">dealflow.category.limit.tree</field>
+        <field name="model">dealflow.category.limit</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="category_id"/>
+                <field name="max_discount"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_dealflow_category_limit_form" model="ir.ui.view">
+        <field name="name">dealflow.category.limit.form</field>
+        <field name="model">dealflow.category.limit</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="category_id"/>
+                        <field name="max_discount"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_dealflow_category_limit" model="ir.actions.act_window">
+        <field name="name">Category Limits</field>
+        <field name="res_model">dealflow.category.limit</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>
