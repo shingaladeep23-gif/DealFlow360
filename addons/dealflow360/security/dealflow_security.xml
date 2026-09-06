@@ -7,10 +7,17 @@
             <field name="sequence">20</field>
         </record>
 
+        <!-- stock.group_stock_user: a rep owns the deliveries their orders
+             generate. Without any Inventory group, every stock.picking the
+             DF-010 split engine creates is unreadable to the person whose
+             order created it, and the Fulfillment screen's links to them
+             raise AccessError. This is operating on stock, not configuring
+             it - warehouse/replenishment setup stays with Admin per
+             section 3. -->
         <record id="group_dealflow_sales_rep" model="res.groups">
             <field name="name">Sales Rep</field>
             <field name="category_id" ref="module_category_dealflow360"/>
-            <field name="implied_ids" eval="[(4, ref('sales_team.group_sale_salesman'))]"/>
+            <field name="implied_ids" eval="[(4, ref('sales_team.group_sale_salesman')), (4, ref('stock.group_stock_user'))]"/>
             <field name="comment">Builds quotations, submits for approval, negotiates with customers.</field>
         </record>
 
@@ -24,18 +31,50 @@
             <field name="comment">First approval step for MEDIUM and HIGH risk quotations.</field>
         </record>
 
+        <!-- stock.group_stock_user: section 3 gives Finance "warehouse
+             fulfillment splits and backorder decisions". It held no Inventory
+             group at all, so it could read the split data and then do nothing
+             with it - consolidating a backorder raised an AccessError. -->
         <record id="group_dealflow_finance" model="res.groups">
             <field name="name">Finance</field>
             <field name="category_id" ref="module_category_dealflow360"/>
-            <field name="implied_ids" eval="[(4, ref('account.group_account_invoice'))]"/>
-            <field name="comment">Second approval step for HIGH risk quotations; owns billing and invoicing.</field>
+            <field name="implied_ids" eval="[(4, ref('account.group_account_invoice')), (4, ref('stock.group_stock_user'))]"/>
+            <field name="comment">Second approval step for HIGH risk quotations; owns billing, invoicing and backorder decisions.</field>
         </record>
 
+        <!-- Section 3: "Admin - manages backend setup: users, roles,
+             products, warehouses." Every one of those is gated by a native
+             Odoo group this role did not hold, so A4 in its entirety was
+             unreachable by ANY business-facing role: all four personas had
+             write denied on stock.warehouse, stock.warehouse.orderpoint and
+             stock.quant, the Warehouses screen rendered "Shipping Cost
+             Weight: 1.00" as read-only text, Replenishment Rules was empty
+             with no way to add one, and only a raw Odoo superuser outside the
+             role model could touch any of it.
+
+             base.group_system is deliberate rather than incidental. Managing
+             USERS AND ROLES is res.users write, and saving a res.config.settings
+             panel is gated on base.group_system by Odoo itself
+             (`if not self.env.is_admin(): raise AccessError`) - which is the
+             exact reason df.admin got an AccessError saving the governance
+             thresholds. This role IS the backend administrator; the other
+             three are not, and none of them imply it.
+
+             The product groups are what make A2's variants and price lists
+             visible at all - without them those menus do not render, however
+             much catalogue data exists behind them. -->
         <record id="group_dealflow_admin" model="res.groups">
             <field name="name">Admin</field>
             <field name="category_id" ref="module_category_dealflow360"/>
-            <field name="implied_ids" eval="[(4, ref('group_dealflow_sales_manager')), (4, ref('group_dealflow_finance'))]"/>
-            <field name="comment">Configures tiers, category limits, warehouses and subscription plans.</field>
+            <field name="implied_ids" eval="[(4, ref('group_dealflow_sales_manager')),
+                                             (4, ref('group_dealflow_finance')),
+                                             (4, ref('base.group_system')),
+                                             (4, ref('stock.group_stock_manager')),
+                                             (4, ref('stock.group_stock_multi_warehouses')),
+                                             (4, ref('stock.group_stock_multi_locations')),
+                                             (4, ref('product.group_product_variant')),
+                                             (4, ref('product.group_product_pricelist'))]"/>
+            <field name="comment">Backend setup: users, roles, products, warehouses, tiers, category limits and subscription plans.</field>
         </record>
 
         <!-- DEC-012: GLOBAL rule (no groups_id) - group rules OR together in
@@ -138,6 +177,48 @@
             <field name="perm_write">0</field>
             <field name="perm_create">0</field>
             <field name="perm_unlink">0</field>
+        </record>
+
+        <!-- The Fulfillment list must not offer rows the viewer cannot open.
+             dealflow.warehouse.split carried no record rule at all, while the
+             sale.order behind it is still scoped by Odoo's own "Own Documents
+             Only" rule for a salesperson - so the list showed every split in
+             the database and clicking one belonging to another rep's order
+             raised a hard Access Error modal on drill-down. Live-reproduced as
+             df.rep: 16 splits listed, S00066 unopenable. It only looked rare
+             because there is effectively one rep in the demo data; with a real
+             team it would fire constantly.
+
+             These mirror Odoo's sale.order rules rather than inventing a new
+             scope: sales_team.group_sale_salesman is "own documents only" and
+             group_sale_salesman_all_leads is "all". Group rules OR together,
+             so a Sales Manager (who holds both) sees everything and a rep sees
+             their own. Finance holds neither sales group, so no rule applies
+             to it and it keeps the full visibility section 3 requires for
+             backorder decisions. -->
+        <record id="rule_dealflow_split_own_documents" model="ir.rule">
+            <field name="name">DealFlow360: a salesperson sees fulfillment splits for their own orders</field>
+            <field name="model_id" ref="model_dealflow_warehouse_split"/>
+            <field name="domain_force">['|', ('order_id.user_id', '=', user.id), ('order_id.user_id', '=', False)]</field>
+            <field name="groups" eval="[(4, ref('sales_team.group_sale_salesman'))]"/>
+        </record>
+        <record id="rule_dealflow_split_all_documents" model="ir.rule">
+            <field name="name">DealFlow360: a sales manager sees every fulfillment split</field>
+            <field name="model_id" ref="model_dealflow_warehouse_split"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('sales_team.group_sale_salesman_all_leads'))]"/>
+        </record>
+        <record id="rule_dealflow_split_line_own_documents" model="ir.rule">
+            <field name="name">DealFlow360: allocation lines follow their split</field>
+            <field name="model_id" ref="model_dealflow_warehouse_split_line"/>
+            <field name="domain_force">['|', ('order_id.user_id', '=', user.id), ('order_id.user_id', '=', False)]</field>
+            <field name="groups" eval="[(4, ref('sales_team.group_sale_salesman'))]"/>
+        </record>
+        <record id="rule_dealflow_split_line_all_documents" model="ir.rule">
+            <field name="name">DealFlow360: a sales manager sees every allocation line</field>
+            <field name="model_id" ref="model_dealflow_warehouse_split_line"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('sales_team.group_sale_salesman_all_leads'))]"/>
         </record>
     </data>
 </odoo>

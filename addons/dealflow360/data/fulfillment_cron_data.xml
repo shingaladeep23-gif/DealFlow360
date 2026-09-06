@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!-- B6: "the Consolidate Remaining Backorder prompt appears
+             automatically" when stock arrives. Stock arriving is an external
+             event that changes no field on the split, so nothing here can be
+             driven by @api.depends. The split's own df_can_consolidate is a
+             live compute, which makes the on-screen banner correct for anyone
+             who opens it; this cron covers the far more common case, which is
+             that nobody is looking at the screen at the moment the stock
+             lands. It notifies once per backorder state, not once per run. -->
+        <record id="ir_cron_notify_consolidatable_backorders" model="ir.cron">
+            <field name="name">DealFlow360: Prompt to consolidate backorders that can now ship</field>
+            <field name="model_id" ref="model_dealflow_warehouse_split"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_notify_consolidatable_backorders()</field>
+            <field name="interval_number">2</field>
+            <field name="interval_type">hours</field>
+            <field name="active" eval="True"/>
+        </record>
+    </data>
+</odoo>

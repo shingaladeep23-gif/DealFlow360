@@ -41,6 +41,7 @@
                             <th>Customer</th>
                             <th>Status</th>
                             <th>Shipments</th>
+                            <th>Est. shipping cost</th>
                             <th>How it ships</th>
                         </tr>
                     </thead>
@@ -53,9 +54,13 @@
                                       t-esc="split.state === 'confirmed' ? 'Ready to ship' : 'Awaiting your OK'"/>
                             </td>
                             <td t-esc="split.shipment_count"/>
+                            <td t-esc="this.formatCost(split)"/>
                             <td>
-                                <span t-if="split.shipment_count > 1" class="o_df_step_badge o_df_step_badge_revision">Ships from 2 warehouses</span>
-                                <span t-if="split.has_backorder" class="o_df_step_badge o_df_step_badge_rejected">Part on backorder</span>
+                                <span t-if="split.df_can_consolidate" class="o_df_step_badge o_df_step_badge_approved"
+                                      t-esc="'Stock arrived - ' + split.df_consolidatable_qty + ' can ship'"/>
+                                <span t-if="split.shipment_count > 1" class="o_df_step_badge o_df_step_badge_revision"
+                                      t-esc="'Ships from ' + split.shipment_count + ' warehouses'"/>
+                                <span t-if="split.has_backorder and !split.df_can_consolidate" class="o_df_step_badge o_df_step_badge_rejected">Part on backorder</span>
                                 <span t-if="split.shipment_count &lt;= 1 and !split.has_backorder" class="text-muted">One shipment</span>
                             </td>
                         </tr>

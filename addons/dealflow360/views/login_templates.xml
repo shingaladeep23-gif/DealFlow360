@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Odoo's login form offers a "Log in as superuser" button whenever the
+         session is in debug mode (web/views/webclient_templates.xml renders it
+         under `t-if="debug"`). It was showing on this product's login page,
+         which is the one screen every customer and every evaluator sees first,
+         and it invites anyone who reaches it to bypass the entire role model
+         this application is built around - the four DealFlow roles, the
+         approval separation of duties, the portal isolation rule.
+
+         Removing it costs a developer nothing: `odoo shell` and a normal admin
+         login both still exist. It is not a substitute for not running a real
+         deployment in debug mode; it removes a one-click escape hatch from the
+         front door. -->
+    <template id="login_no_superuser_shortcut"
+              name="Login: no one-click superuser escape hatch"
+              inherit_id="web.login">
+        <!-- Selected on @name, not on @value="/web/become": Odoo restricts
+             inheritance selectors to a whitelist of attributes and rejects
+             @value outright ("View inheritance may not use attribute 'value'
+             as a selector"). The hidden redirect input in the same form is an
+             <input>, so narrowing to button[@name='redirect'] matches only the
+             superuser shortcut. -->
+        <xpath expr="//button[@name='redirect']" position="replace"/>
+    </template>
+</odoo>

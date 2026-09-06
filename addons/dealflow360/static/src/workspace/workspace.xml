@@ -42,9 +42,11 @@
                              t-on-click="() => this.openOrder(order.id)">
                             <div class="o_df_workspace_card_top">
                                 <strong t-esc="order.name"/>
-                                <span t-attf-class="o_df_risk_badge o_df_risk_badge_#{order.df_risk_level}"
-                                      t-esc="order.riskLabel"/>
+                                <span t-attf-class="o_df_stage_badge o_df_stage_badge_#{order.df_pipeline_stage}"
+                                      t-esc="order.stageLabel"/>
                             </div>
+                            <div t-if="order.df_risk_level !== 'none'" class="o_df_workspace_card_risk"
+                                 t-esc="order.riskLabel"/>
                             <div class="o_df_workspace_card_customer" t-esc="order.partner_id[1]"/>
                             <div class="o_df_workspace_card_bottom">
                                 <span class="o_df_workspace_card_amount" t-esc="order.amountLabel"/>

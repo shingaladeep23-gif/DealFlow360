@@ -89,10 +89,28 @@ class SaleOrder(models.Model):
         string="Stage",
         compute="_compute_df_pipeline_stage",
         store=True,
+        group_expand="_read_group_df_pipeline_stage",
         help="The Kanban column a quotation sits in, derived from native "
         "state plus the approval chain plus portal negotiations. Never set "
         "by hand.",
     )
+
+    @api.model
+    def _read_group_df_pipeline_stage(self, *args, **kwargs):
+        """Render all five pipeline columns, empty ones included.
+
+        Odoo only produces a Kanban column for a group that actually has
+        records, so the board showed 3 of its 5 stages - Approved and Confirmed
+        never appeared, and a pipeline that silently hides the two stages
+        representing SUCCESS is worse than no pipeline. A funnel has to show
+        the empty steps or it cannot show that they are empty.
+
+        (*args/**kwargs: Odoo calls a group_expand with different signatures
+        depending on the field type and version - (values, domain) for a
+        selection, plus an order for a many2one. The answer here does not
+        depend on any of them: the stages are a fixed, ordered set.)
+        """
+        return [value for value, _label in self._fields["df_pipeline_stage"].selection]
 
     @api.depends(
         "order_line.price_subtotal",

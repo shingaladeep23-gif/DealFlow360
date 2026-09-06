@@ -81,6 +81,61 @@
     }
 }
 
+/* B2's stage badge on a workspace quotation card. The card used to badge the
+   RISK level, which answers a different question - risk is whether the deal
+   needs a signature, stage is where it has actually got to. Risk survives as
+   the smaller line underneath, and as the colour stripe on the card edge. */
+.o_df_stage_badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    background-color: #eef2ff;
+    color: #3730a3;
+
+    &.o_df_stage_badge_draft { background-color: #f1f3f5; color: #495057; }
+    &.o_df_stage_badge_pending_approval { background-color: #fff8e1; color: #7a5c00; }
+    &.o_df_stage_badge_negotiation { background-color: #fdecea; color: #8c1c13; }
+    &.o_df_stage_badge_approved { background-color: #e7f6ec; color: #14532d; }
+    &.o_df_stage_badge_confirmed { background-color: #dbeafe; color: #1e3a8a; }
+}
+
+.o_df_workspace_card_risk {
+    margin-top: 2px;
+    font-size: 0.75rem;
+    color: #8c6d1f;
+}
+
+/* The fulfillment screen's banners. The class was already used on three
+   <div>s in views/warehouse_split_views.xml and defined nowhere, so the
+   "part of this order is on backorder" and "recommended allocation" notes
+   rendered as unstyled body text indistinguishable from the form around
+   them. o_df_flag_banner_action is the one that wants acting on - B6's
+   "stock has arrived, you can consolidate now" prompt. */
+.o_df_flag_banner {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 6px;
+    align-items: baseline;
+    border: 1px solid #f0d78c;
+    background-color: #fff8e1;
+    color: #7a5c00;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+    line-height: 1.5;
+
+    &.o_df_flag_banner_action {
+        background-color: #e7f6ec;
+        border-color: #a6d9b8;
+        color: #14532d;
+        font-weight: 500;
+    }
+}
+
 /* One-line explainer under a screen title: what this screen is for, in the
    user's words. Replaces subtitles that used to cite internal ticket ids. */
 .o_df_screen_hint {

@@ -33,6 +33,22 @@ const RISK_LABELS = {
     high: "Manager + finance",
 };
 
+// B2 asks a quotation card to carry its STAGE. The card used to show the risk
+// level instead, which answers a different question: risk says whether the
+// deal needs a signature, stage says where it has actually got to. A rep
+// scanning the list wants "waiting for approval" / "confirmed", not "manager +
+// finance" on a deal that was signed off last week. Risk is still on the card,
+// as the colour stripe down its edge.
+const STAGE_LABELS = Object.fromEntries(
+    [
+        ["draft", "Draft"],
+        ["pending_approval", "Waiting for approval"],
+        ["approved", "Approved"],
+        ["negotiation", "In negotiation"],
+        ["confirmed", "Confirmed"],
+    ]
+);
+
 export class DealflowWorkspace extends Component {
     static template = "dealflow360.Workspace";
     static props = { "*": true };
@@ -75,6 +91,8 @@ export class DealflowWorkspace extends Component {
                     currencyId: order.currency_id && order.currency_id[0],
                 }),
                 riskLabel: RISK_LABELS[order.df_risk_level] || order.df_risk_level,
+                stageLabel:
+                    STAGE_LABELS[order.df_pipeline_stage] || order.df_pipeline_stage,
             })),
             loading: false,
         });

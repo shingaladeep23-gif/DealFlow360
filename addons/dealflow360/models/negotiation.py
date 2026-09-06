@@ -21,6 +21,22 @@ class DealflowNegotiation(models.Model):
     _inherit = ["mail.thread"]
     _description = "Portal negotiation thread for a quotation (DF-014)"
     _order = "create_date desc"
+    # Same defect as dealflow.approval and dealflow.warehouse.split: with no
+    # name field the label falls back to "dealflow.negotiation,7", which is
+    # what a breadcrumb and any many2one to this record would have shown.
+    _rec_name = "display_name"
+
+    display_name = fields.Char(compute="_compute_display_name", store=True)
+
+    @api.depends("order_id.name", "counter_discount")
+    def _compute_display_name(self):
+        for negotiation in self:
+            negotiation.display_name = _(
+                "%(order)s - customer asked for %(pct).2f%%"
+            ) % {
+                "order": negotiation.order_id.name or _("Quotation"),
+                "pct": negotiation.counter_discount or 0.0,
+            }
 
     order_id = fields.Many2one(
         "sale.order",

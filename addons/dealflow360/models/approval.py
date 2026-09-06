@@ -32,6 +32,26 @@ class DealflowApproval(models.Model):
     _name = "dealflow.approval"
     _description = "Discount Approval"
     _order = "create_date desc"
+    # A model with no name field falls back to "model,id" for its label, so
+    # this record's breadcrumb read "dealflow.approval,15" - a raw technical
+    # reference sitting on the core approval screen.
+    _rec_name = "display_name"
+
+    display_name = fields.Char(compute="_compute_display_name", store=True)
+
+    @api.depends("order_id.name", "risk_level")
+    def _compute_display_name(self):
+        levels = dict(self._fields["risk_level"].selection)
+        for approval in self:
+            if not approval.order_id:
+                approval.display_name = _("Approval")
+                continue
+            level = levels.get(approval.risk_level)
+            approval.display_name = (
+                _("%(order)s - %(level)s") % {"order": approval.order_id.name, "level": level}
+                if level
+                else _("Approval for %s") % approval.order_id.name
+            )
 
     order_id = fields.Many2one(
         "sale.order", string="Quotation", required=True, ondelete="cascade", index=True
@@ -298,6 +318,18 @@ class DealflowApprovalStep(models.Model):
     _name = "dealflow.approval.step"
     _description = "Approval Step"
     _order = "sequence"
+    # The Approvals list shows current_step_id in its "Waiting on" column.
+    # With no name field that rendered as "dealflow.approval.step,29" - the
+    # single least useful answer to "who is this waiting on".
+    _rec_name = "display_name"
+
+    display_name = fields.Char(compute="_compute_display_name", store=True)
+
+    @api.depends("role")
+    def _compute_display_name(self):
+        roles = dict(self._fields["role"].selection)
+        for step in self:
+            step.display_name = roles.get(step.role) or _("Approval Step")
 
     approval_id = fields.Many2one(
         "dealflow.approval", string="Approval", required=True, ondelete="cascade", index=True

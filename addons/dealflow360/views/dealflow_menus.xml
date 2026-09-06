@@ -15,11 +15,17 @@
               groups="group_dealflow_sales_rep,group_dealflow_finance"/>
 
     <!-- Quotations: native sale.order, extended in later phases -->
+    <!-- The domain used to be state in (draft, sent), which is why the
+         pipeline Kanban could never render its Confirmed column: a confirmed
+         order is state='sale' and was filtered out of the action before the
+         Kanban ever saw it. A pipeline that structurally cannot show the deals
+         that closed is not a pipeline. Cancelled deals stay out - they are not
+         in the funnel. -->
     <record id="action_dealflow_quotations" model="ir.actions.act_window">
         <field name="name">Quotations</field>
         <field name="res_model">sale.order</field>
         <field name="view_mode">tree,form</field>
-        <field name="domain">[('state', 'in', ('draft', 'sent'))]</field>
+        <field name="domain">[('state', '!=', 'cancel')]</field>
     </record>
     <menuitem id="menu_dealflow_dashboard" name="Dashboard" parent="menu_dealflow_root" sequence="10"
               groups="group_dealflow_sales_rep,group_dealflow_finance"/>
@@ -29,7 +35,7 @@
     <menuitem id="menu_dealflow_approvals" name="Approvals" parent="menu_dealflow_root" sequence="30"
               groups="group_dealflow_sales_manager,group_dealflow_finance"/>
     <menuitem id="menu_dealflow_fulfillment" name="Fulfillment" parent="menu_dealflow_root" sequence="40"
-              groups="group_dealflow_sales_rep"/>
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
     <menuitem id="menu_dealflow_subscriptions" name="Subscriptions" parent="menu_dealflow_root" sequence="50"
               groups="group_dealflow_sales_rep,group_dealflow_finance"/>
     <menuitem id="menu_dealflow_invoices" name="Invoices" parent="menu_dealflow_root" sequence="60"
@@ -45,17 +51,27 @@
               action="action_dealflow_product_template" sequence="90"
               groups="group_dealflow_sales_rep"/>
 
-    <!-- Configuration (admin only): verify DF-001 seed models in the UI.
-         Finance has read ACL on these two models per DEC-013 (so it can see
-         the ceilings behind an approval it is judging), but navigation stays
-         admin-only here - Finance's read is meant to surface via the
+    <!-- Configuration. Section 3 makes the Sales Manager the owner of
+         "discount tiers and approval chains", so the three items that ARE
+         those things (tiers, category limits, the routing thresholds) open
+         for group_dealflow_sales_manager - which group_dealflow_admin
+         implies, so admin keeps them too. The rest of the Configuration
+         area is backend setup and stays admin-only.
+
+         Before this the whole menu was admin-only and every tier write threw
+         an AccessError, so a Sales Manager could not do the one configuration
+         job the spec assigns them. Finance has read ACL on tiers per DEC-013
+         (so it can see the ceilings behind an approval it is judging), but
+         still gets no navigation here - that read is meant to surface via the
          approval screen (DF-004/DF-006), not this raw config menu. -->
     <menuitem id="menu_dealflow_configuration" name="Configuration" parent="menu_dealflow_root"
-              groups="group_dealflow_admin" sequence="100"/>
+              groups="group_dealflow_sales_manager" sequence="100"/>
     <menuitem id="menu_dealflow_discount_tiers" name="Discount Tiers" parent="menu_dealflow_configuration"
               action="action_dealflow_discount_tier" sequence="10"
-              groups="group_dealflow_admin"/>
+              groups="group_dealflow_sales_manager"/>
     <menuitem id="menu_dealflow_category_limits" name="Category Limits" parent="menu_dealflow_configuration"
               action="action_dealflow_category_limit" sequence="20"
-              groups="group_dealflow_admin"/>
+              groups="group_dealflow_sales_manager"/>
+    <!-- Approval Policy lives in config_views.xml with its action, which the
+         manifest loads after this file. -->
 </odoo>

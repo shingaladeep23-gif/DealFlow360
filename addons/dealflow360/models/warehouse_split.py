@@ -16,14 +16,33 @@ from odoo.exceptions import UserError
 class StockWarehouseShippingCost(models.Model):
     _inherit = "stock.warehouse"
 
+    currency_id = fields.Many2one(
+        related="company_id.currency_id", string="Currency", readonly=True
+    )
     df_shipping_cost_weight = fields.Float(
         string="Shipping Cost Weight",
         default=1.0,
-        help="Relative per-shipment shipping cost. Not a monetary figure - a "
-        "dimensionless weight (e.g. a remote depot might carry 1.5 against "
-        "the main warehouse's 1.0). Used only as a DEC-006 tie-break when "
-        "two or more warehouses could source an equal number of order "
-        "lines; the allocation engine prefers the lower weight.",
+        help="How expensive this warehouse is to ship from, relative to the "
+        "others - a remote depot might carry 1.5 against the main "
+        "warehouse's 1.0. Multiplies both costs below, and breaks the DEC-006 "
+        "tie when two warehouses could source an equal number of order lines "
+        "(the allocation engine prefers the lower weight).",
+    )
+    df_shipping_base_cost = fields.Monetary(
+        string="Cost per Shipment",
+        default=15.0,
+        currency_field="currency_id",
+        help="Fixed cost of dispatching one shipment from this warehouse, "
+        "before the weight above is applied. Charged once per delivery, "
+        "however many lines it carries - which is exactly why DEC-006 "
+        "minimizes the number of shipments.",
+    )
+    df_shipping_cost_per_unit = fields.Monetary(
+        string="Cost per Unit",
+        default=1.5,
+        currency_field="currency_id",
+        help="Variable cost of shipping one unit from this warehouse, before "
+        "the weight above is applied.",
     )
 
 
@@ -92,6 +111,23 @@ class DealflowWarehouseSplit(models.Model):
     _name = "dealflow.warehouse.split"
     _description = "Multi-warehouse fulfillment allocation for a quotation (DF-010)"
     _order = "create_date desc"
+    # Without a name field or a _rec_name Odoo falls back to "model,id", so
+    # this record's breadcrumb read "dealflow.warehouse.split,12" - a raw
+    # technical reference on a customer-facing screen.
+    _rec_name = "display_name"
+
+    display_name = fields.Char(compute="_compute_display_name", store=True)
+
+    @api.depends("order_id.name", "shipment_count")
+    def _compute_display_name(self):
+        for split in self:
+            if not split.order_id:
+                split.display_name = _("Fulfillment Split")
+                continue
+            split.display_name = _("Fulfillment for %(order)s (%(n)d shipment(s))") % {
+                "order": split.order_id.name,
+                "n": split.shipment_count,
+            }
 
     order_id = fields.Many2one(
         "sale.order",
@@ -126,6 +162,38 @@ class DealflowWarehouseSplit(models.Model):
     has_backorder = fields.Boolean(
         string="Has Backorder", compute="_compute_shipment_count", store=True
     )
+    currency_id = fields.Many2one(
+        related="order_id.currency_id", string="Currency", readonly=True
+    )
+    df_estimated_shipping_cost = fields.Monetary(
+        string="Est. Shipping Cost",
+        compute="_compute_df_estimated_shipping_cost",
+        store=True,
+        currency_field="currency_id",
+        help="What this allocation is estimated to cost to ship: every "
+        "warehouse's fixed per-shipment cost, charged once each, plus the "
+        "per-unit cost of everything allocated to it, each scaled by that "
+        "warehouse's cost weight. This is the figure DEC-006's "
+        "shipment-minimizing allocation is trying to keep down, so splitting "
+        "an order across a second warehouse visibly costs more.",
+    )
+    df_consolidatable_qty = fields.Float(
+        string="Now Sourceable",
+        compute="_compute_df_consolidatable",
+        help="How much of this split's outstanding backorder could be "
+        "shipped from stock that exists right now.",
+    )
+    df_can_consolidate = fields.Boolean(
+        string="Backorder Can Ship", compute="_compute_df_consolidatable"
+    )
+    df_consolidation_notified = fields.Boolean(
+        string="Consolidation Prompt Sent",
+        default=False,
+        copy=False,
+        help="Set once the cron has told the deal's owner that arrived stock "
+        "can clear this backorder, so the nudge is not repeated daily. Reset "
+        "whenever the backorder actually changes.",
+    )
 
     @api.depends("line_ids.warehouse_id", "line_ids.qty", "line_ids.is_backorder")
     def _compute_shipment_count(self):
@@ -137,6 +205,103 @@ class DealflowWarehouseSplit(models.Model):
             split.has_backorder = bool(
                 split.line_ids.filtered(lambda l: l.is_backorder and l.qty > 1e-6)
             )
+
+    @api.depends(
+        "line_ids.df_estimated_cost",
+        "line_ids.warehouse_id",
+        "line_ids.is_backorder",
+        "line_ids.qty",
+    )
+    def _compute_df_estimated_shipping_cost(self):
+        for split in self:
+            fulfilled = split.line_ids.filtered(
+                lambda l: not l.is_backorder and l.qty > 1e-6
+            )
+            per_shipment = sum(
+                warehouse.df_shipping_base_cost
+                * (warehouse.df_shipping_cost_weight or 1.0)
+                for warehouse in fulfilled.mapped("warehouse_id")
+            )
+            split.df_estimated_shipping_cost = per_shipment + sum(
+                fulfilled.mapped("df_estimated_cost")
+            )
+
+    def _compute_df_consolidatable(self):
+        """How much of the outstanding backorder could ship TODAY.
+
+        B6 says the "Consolidate Remaining Backorder" prompt appears
+        automatically when stock arrives. It did not: nothing recomputed
+        anything when a quant changed, so the option only existed for a user
+        who already knew to go and press the button - which is the one person
+        who does not need prompting. Stock arriving is an external event with
+        no field on this record changing, so this is a live (non-stored)
+        compute reading real stock.quant, which makes the banner correct the
+        moment anyone opens the screen; _cron_notify_consolidatable_backorders
+        below covers the case where nobody opens it at all.
+        """
+        for split in self:
+            backorder = split.line_ids.filtered(
+                lambda l: l.is_backorder and l.qty > 1e-6
+            )
+            if not backorder or split.state != "confirmed":
+                split.df_consolidatable_qty = 0.0
+                split.df_can_consolidate = False
+                continue
+            warehouses = self.env["stock.warehouse"].search(
+                [("company_id", "=", split.order_id.company_id.id)]
+            )
+            products = backorder.mapped("order_line_id.product_id")
+            free = split._free_qty_map(warehouses, products)
+            # Pool per product, and draw it down: two backorder rows for the
+            # same product must not both claim the same units.
+            pool = {}
+            for (_wh_id, product_id), qty in free.items():
+                pool[product_id] = pool.get(product_id, 0.0) + max(0.0, qty)
+            total = 0.0
+            for line in backorder:
+                product_id = line.order_line_id.product_id.id
+                take = min(line.qty, pool.get(product_id, 0.0))
+                if take > 1e-6:
+                    pool[product_id] -= take
+                    total += take
+            split.df_consolidatable_qty = total
+            split.df_can_consolidate = total > 1e-6
+
+    @api.model
+    def _cron_notify_consolidatable_backorders(self):
+        """Tell the deal's owner when arrived stock can clear a backorder.
+
+        The live compute above makes the prompt correct for anyone who opens
+        the screen. This is for the far more common case: nobody is looking.
+        Notifies once per backorder state, not once per day.
+        """
+        candidates = self.search(
+            [
+                ("state", "=", "confirmed"),
+                ("has_backorder", "=", True),
+                ("df_consolidation_notified", "=", False),
+            ]
+        )
+        for split in candidates:
+            if not split.df_can_consolidate:
+                continue
+            order = split.order_id
+            body = _(
+                "Stock has arrived: %(qty).2f unit(s) of the backorder on "
+                "%(order)s can now be shipped. Open Fulfillment and use "
+                "Consolidate Backorder to release them."
+            ) % {"qty": split.df_consolidatable_qty, "order": order.name}
+            order.message_post(
+                body=body, message_type="comment", subtype_xmlid="mail.mt_comment"
+            )
+            if order.user_id:
+                order.activity_schedule(
+                    "mail.mail_activity_data_todo",
+                    user_id=order.user_id.id,
+                    summary=_("Backorder can ship: %s") % order.name,
+                    note=body,
+                )
+            split.df_consolidation_notified = True
 
     def _fulfillable_lines(self):
         self.ensure_one()
@@ -443,6 +608,9 @@ class DealflowWarehouseSplit(models.Model):
             split.line_ids.filtered(
                 lambda l: l.is_backorder and l.qty <= 1e-6
             ).unlink()
+            # The backorder has changed, so a future arrival deserves a fresh
+            # prompt rather than being suppressed by the one already sent.
+            split.df_consolidation_notified = False
             split._create_pickings_for_lines(new_lines)
             split.order_id.message_post(
                 body=_(
@@ -476,19 +644,39 @@ class DealflowWarehouseSplitLine(models.Model):
     warehouse_id = fields.Many2one("stock.warehouse", string="Warehouse")
     qty = fields.Float(string="Quantity", required=True)
     is_backorder = fields.Boolean(string="Backorder", default=False)
-    df_estimated_cost = fields.Float(
+    currency_id = fields.Many2one(
+        related="split_id.order_id.currency_id", string="Currency", readonly=True
+    )
+    df_estimated_cost = fields.Monetary(
         string="Est. Shipping Cost",
         compute="_compute_df_estimated_cost",
         store=True,
-        help="DEC-006's shipping cost weight, shown once per row for "
-        "inspectability - not a monetary total, a relative tie-break proxy.",
+        currency_field="currency_id",
+        help="Estimated cost of shipping this allocation: the warehouse's "
+        "per-unit shipping cost times the allocated quantity, scaled by that "
+        "warehouse's cost weight. The per-shipment fixed cost is added once "
+        "per delivery at the split level, not repeated on every row.",
     )
 
-    @api.depends("warehouse_id.df_shipping_cost_weight", "is_backorder")
+    @api.depends(
+        "warehouse_id.df_shipping_cost_weight",
+        "warehouse_id.df_shipping_cost_per_unit",
+        "qty",
+        "is_backorder",
+    )
     def _compute_df_estimated_cost(self):
+        # This column used to echo the warehouse's dimensionless tie-break
+        # weight, which is 1.00 on every warehouse out of the box - so the
+        # screen B6 asks to "show estimated shipment cost" showed 1.00 on
+        # every row of every split regardless of what was being shipped, and
+        # answered no question at all. It is a real money figure now, and it
+        # moves with quantity and with the warehouse it ships from.
         for line in self:
+            warehouse = line.warehouse_id
             line.df_estimated_cost = (
                 0.0
-                if line.is_backorder or not line.warehouse_id
-                else line.warehouse_id.df_shipping_cost_weight
+                if line.is_backorder or not warehouse
+                else warehouse.df_shipping_cost_per_unit
+                * (line.qty or 0.0)
+                * (warehouse.df_shipping_cost_weight or 1.0)
             )

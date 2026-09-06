@@ -22,7 +22,9 @@
                     <button name="action_confirm" type="object" string="Accept Suggested Split"
                             class="btn-primary" invisible="state == 'confirmed'"/>
                     <button name="action_consolidate_backorder" type="object" string="Consolidate Backorder"
-                            invisible="state != 'confirmed' or not has_backorder"/>
+                            class="btn-primary" invisible="not df_can_consolidate"/>
+                    <button name="action_consolidate_backorder" type="object" string="Consolidate Backorder"
+                            invisible="state != 'confirmed' or not has_backorder or df_can_consolidate"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,confirmed"/>
                 </header>
                 <sheet>
@@ -34,20 +36,32 @@
                     <group col="4">
                         <field name="partner_id" readonly="1"/>
                         <field name="shipment_count" readonly="1" string="Est. Shipments"/>
+                        <field name="df_estimated_shipping_cost" readonly="1"/>
+                        <field name="currency_id" invisible="1"/>
                         <field name="has_backorder" readonly="1" invisible="1"/>
+                        <field name="df_can_consolidate" invisible="1"/>
+                        <field name="df_consolidatable_qty" invisible="1"/>
                     </group>
                     <div class="o_df_flag_banner" invisible="shipment_count &lt;= 1 or has_backorder">
                         Recommended allocation combines shipments where possible to minimize shipping cost and lead time.
                     </div>
-                    <div class="o_df_flag_banner" invisible="not has_backorder">
-                        Part of this order cannot be sourced from current stock and is on backorder. Use "Consolidate Backorder" once new stock arrives.
+                    <!-- B6's automatic prompt. df_can_consolidate is a live
+                         compute over real stock.quant, so this banner is
+                         correct the moment the screen is opened rather than
+                         waiting for anyone to press anything. -->
+                    <div class="o_df_flag_banner o_df_flag_banner_action" invisible="not df_can_consolidate">
+                        Stock has arrived: <field name="df_consolidatable_qty" readonly="1" class="oe_inline"/> unit(s) of this backorder can be shipped now. Use "Consolidate Backorder" to release them.
+                    </div>
+                    <div class="o_df_flag_banner" invisible="not has_backorder or df_can_consolidate">
+                        Part of this order cannot be sourced from current stock and is on backorder. This banner will change as soon as stock arrives that can clear it.
                     </div>
                     <field name="line_ids" readonly="state == 'confirmed'">
                         <tree string="Allocation" editable="bottom" decoration-warning="is_backorder">
                             <field name="product_id" readonly="1"/>
                             <field name="warehouse_id"/>
                             <field name="qty"/>
-                            <field name="df_estimated_cost" string="Cost"/>
+                            <field name="currency_id" column_invisible="1"/>
+                            <field name="df_estimated_cost" string="Est. Shipping Cost" sum="Est. Shipping Cost"/>
                             <field name="is_backorder" widget="boolean_toggle"/>
                         </tree>
                     </field>
@@ -68,7 +82,12 @@
         <field name="tag">dealflow_fulfillment</field>
     </record>
 
+    <!-- Finance is listed because section 3 gives it "warehouse fulfillment
+         splits and backorder decisions". It could read every split and every
+         picking and had no way to navigate to any of them - group_dealflow_finance
+         does not imply group_dealflow_sales_rep, so a rep-only menu is
+         invisible to it. -->
     <menuitem id="menu_dealflow_fulfillment" name="Fulfillment" parent="menu_dealflow_root"
               action="action_dealflow_fulfillment" sequence="40"
-              groups="group_dealflow_sales_rep"/>
+              groups="group_dealflow_sales_rep,group_dealflow_finance"/>
 </odoo>

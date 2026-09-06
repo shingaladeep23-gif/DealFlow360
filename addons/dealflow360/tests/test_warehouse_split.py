@@ -305,3 +305,107 @@ class TestWarehouseSplit(TransactionCase):
         self.assertFalse(
             stray, "native single-warehouse delivery should have been cancelled"
         )
+
+    # -- B6: the screen has to show an estimated SHIPMENT COST --------------
+
+    def test_estimated_cost_is_money_and_moves_with_quantity(self):
+        """The Cost column used to echo df_shipping_cost_weight, which is 1.00
+        on every warehouse out of the box - so every row of every split read
+        1.00 regardless of what was being shipped, and answered no question at
+        all."""
+        wh = self._make_warehouse("Cost WH A", "CWA")
+        wh.write({"df_shipping_base_cost": 20.0, "df_shipping_cost_per_unit": 2.0})
+        product = self._make_storable("Cost Product A")
+        self._stock(product, wh, 50)
+        order = self._make_order(product, 10)
+
+        split = self.env["dealflow.warehouse.split"].create({"order_id": order.id})
+        split.action_generate_split()
+
+        line = split.line_ids
+        self.assertAlmostEqual(line.df_estimated_cost, 20.0, places=2)  # 10 x 2.00
+        # One shipment: its fixed cost plus the per-unit cost of what it carries.
+        self.assertAlmostEqual(split.df_estimated_shipping_cost, 40.0, places=2)
+
+    def test_a_second_warehouse_visibly_costs_more_to_ship(self):
+        """DEC-006 minimizes shipment count because shipments cost money. The
+        estimate has to reflect that, or the objective is invisible."""
+        wh_a = self._make_warehouse("Cost WH B", "CWB")
+        wh_b = self._make_warehouse("Cost WH C", "CWC", cost_weight=2.0)
+        for wh in (wh_a, wh_b):
+            wh.write({"df_shipping_base_cost": 20.0, "df_shipping_cost_per_unit": 1.0})
+        product = self._make_storable("Cost Product B")
+        self._stock(product, wh_a, 6)
+        self._stock(product, wh_b, 6)
+        order = self._make_order(product, 10)
+
+        split = self.env["dealflow.warehouse.split"].create({"order_id": order.id})
+        split.action_generate_split()
+
+        self.assertEqual(split.shipment_count, 2)
+        # Both warehouses' fixed costs are charged, and the remote one's weight
+        # of 2.0 doubles its share.
+        self.assertGreater(split.df_estimated_shipping_cost, 40.0)
+
+    def test_backorder_rows_cost_nothing_until_they_ship(self):
+        wh = self._make_warehouse("Cost WH D", "CWD")
+        wh.write({"df_shipping_base_cost": 20.0, "df_shipping_cost_per_unit": 3.0})
+        product = self._make_storable("Cost Product C")
+        self._stock(product, wh, 2)
+        order = self._make_order(product, 10)
+
+        split = self.env["dealflow.warehouse.split"].create({"order_id": order.id})
+        split.action_generate_split()
+
+        backorder = split.line_ids.filtered("is_backorder")
+        self.assertTrue(backorder)
+        self.assertAlmostEqual(backorder.df_estimated_cost, 0.0, places=2)
+
+    # -- B6: the consolidation prompt has to appear on its own --------------
+
+    def test_consolidation_prompt_appears_when_stock_arrives(self):
+        """B6 says the prompt "appears automatically". Nothing recomputed
+        anything when stock landed, so the option only existed for a user who
+        already knew to go and press the button - which is the one person who
+        does not need prompting."""
+        wh = self._make_warehouse("Consol WH A", "KWA")
+        product = self._make_storable("Consol Product A")
+        self._stock(product, wh, 2)
+        order = self._make_order(product, 10)
+        order.action_confirm()
+        split = order.df_split_ids
+        split.action_confirm()
+
+        self.assertTrue(split.has_backorder)
+        self.assertFalse(
+            split.df_can_consolidate, "nothing has arrived yet"
+        )
+
+        self._stock(product, wh, 8)  # a delivery lands
+
+        split.invalidate_recordset(["df_can_consolidate", "df_consolidatable_qty"])
+        self.assertTrue(split.df_can_consolidate)
+        self.assertAlmostEqual(split.df_consolidatable_qty, 8.0, places=2)
+
+    def test_the_consolidation_cron_nudges_the_deals_owner(self):
+        wh = self._make_warehouse("Consol WH B", "KWB")
+        product = self._make_storable("Consol Product B")
+        self._stock(product, wh, 1)
+        order = self._make_order(product, 6)
+        order.action_confirm()
+        split = order.df_split_ids
+        split.action_confirm()
+        self._stock(product, wh, 5)
+
+        messages_before = len(order.message_ids)
+        self.env["dealflow.warehouse.split"]._cron_notify_consolidatable_backorders()
+
+        order.invalidate_recordset(["message_ids"])
+        self.assertGreater(len(order.message_ids), messages_before)
+        self.assertTrue(split.df_consolidation_notified)
+
+        # ...and it does not nag again on the next run.
+        messages_after = len(order.message_ids)
+        self.env["dealflow.warehouse.split"]._cron_notify_consolidatable_backorders()
+        order.invalidate_recordset(["message_ids"])
+        self.assertEqual(len(order.message_ids), messages_after)

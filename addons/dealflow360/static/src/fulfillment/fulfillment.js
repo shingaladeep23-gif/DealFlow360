@@ -2,6 +2,7 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { formatMonetary } from "@web/views/fields/formatters";
 import { Component, onWillStart, useState } from "@odoo/owl";
 
 /**
@@ -38,10 +39,30 @@ export class DealflowFulfillment extends Component {
                 ["warehouse_id", "product_id", "quantity", "reserved_quantity"],
                 { limit: 300 }
             ),
+            // No explicit domain: the record rules in
+            // security/dealflow_security.xml scope this to the splits the
+            // viewer can actually OPEN. Before those existed this list showed
+            // every split in the database while the sale.order behind it was
+            // still scoped by Odoo's "Own Documents Only" rule, so clicking a
+            // colleague's row raised a hard Access Error modal.
+            //
+            // df_can_consolidate / df_consolidatable_qty are live computes
+            // over real stock.quant, which is what lets B6's "stock has
+            // arrived" prompt appear here without anyone pressing anything.
             this.orm.searchRead(
                 "dealflow.warehouse.split",
                 [],
-                ["order_id", "partner_id", "state", "shipment_count", "has_backorder"],
+                [
+                    "order_id",
+                    "partner_id",
+                    "state",
+                    "shipment_count",
+                    "has_backorder",
+                    "df_estimated_shipping_cost",
+                    "df_can_consolidate",
+                    "df_consolidatable_qty",
+                    "currency_id",
+                ],
                 { order: "create_date desc", limit: 20 }
             ),
         ]);
@@ -67,6 +88,14 @@ export class DealflowFulfillment extends Component {
             .sort((a, b) => a.warehouse.localeCompare(b.warehouse) || a.product.localeCompare(b.product));
 
         Object.assign(this.state, { stockRows, splits, loading: false });
+    }
+
+    /** B6 asks this screen to show an estimated shipment cost, so it has to
+     *  read as money rather than as a bare float. */
+    formatCost(split) {
+        return formatMonetary(split.df_estimated_shipping_cost || 0, {
+            currencyId: split.currency_id && split.currency_id[0],
+        });
     }
 
     openSplit(splitId) {
