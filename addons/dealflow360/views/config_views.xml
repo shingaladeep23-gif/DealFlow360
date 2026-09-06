@@ -10,6 +10,57 @@
          A2's price lists are Odoo's own model, so that menu just points at the
          native action rather than rebuilding it. -->
 
+    <!-- A3: the approval-routing thresholds.
+         These four numbers already existed, but only as ir.config_parameter
+         keys behind a res.config.settings panel that no DealFlow role can
+         reach or save (Odoo gates res.config.settings.execute() on
+         base.group_system). See models/governance_policy.py. This screen is
+         open to the Sales Manager because section 3 makes them the owner of
+         "discount tiers and approval chains". -->
+    <record id="view_dealflow_governance_policy_form" model="ir.ui.view">
+        <field name="name">dealflow.governance.policy.form</field>
+        <field name="model">dealflow.governance.policy</field>
+        <field name="arch" type="xml">
+            <form string="Approval Policy">
+                <sheet>
+                    <group string="Discount governance">
+                        <field name="default_max_discount"/>
+                        <div class="text-muted mb-2" colspan="2">
+                            Applied to a line when neither the customer's tier nor the
+                            product's category sets a limit. A tier or category left at 0
+                            counts as unset, not as "no discount allowed".
+                        </div>
+                    </group>
+                    <group string="Approval chain">
+                        <field name="risk_high_min"/>
+                        <div class="text-muted mb-2" colspan="2">
+                            Which range needs which signatures. A flagged quotation scoring
+                            at or below this needs a Sales Manager only; above it, a Sales
+                            Manager and then Finance.
+                        </div>
+                    </group>
+                    <group string="Deal health">
+                        <field name="health_stalled_days"/>
+                        <field name="health_approval_delay_days"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_save" type="object" string="Save"
+                            class="btn-primary" data-hotkey="q"/>
+                    <button string="Discard" class="btn-secondary" special="cancel"
+                            data-hotkey="x"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_dealflow_governance_policy" model="ir.actions.act_window">
+        <field name="name">Approval Policy</field>
+        <field name="res_model">dealflow.governance.policy</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
     <!-- A5: recurring plans -->
     <record id="view_dealflow_recurring_plan_tree" model="ir.ui.view">
         <field name="name">dealflow.recurring.plan.tree</field>
@@ -43,6 +94,10 @@
                         <group string="Changes and cancellation">
                             <field name="proration"/>
                             <field name="cancel_rule"/>
+                            <field name="cancel_refund_pct"
+                                   invisible="cancel_rule != 'prorate_refund'"/>
+                            <field name="cancel_fee"/>
+                            <field name="cancel_notice_days"/>
                         </group>
                     </group>
                 </sheet>
@@ -99,7 +154,10 @@
         <field name="inherit_id" ref="stock.view_warehouse"/>
         <field name="arch" type="xml">
             <field name="code" position="after">
+                <field name="currency_id" invisible="1"/>
                 <field name="df_shipping_cost_weight"/>
+                <field name="df_shipping_base_cost"/>
+                <field name="df_shipping_cost_per_unit"/>
             </field>
         </field>
     </record>
@@ -126,6 +184,10 @@
     </record>
 
     <!-- Menus -->
+    <menuitem id="menu_dealflow_approval_policy" name="Approval Policy"
+              parent="menu_dealflow_configuration"
+              action="action_dealflow_governance_policy" sequence="25"
+              groups="group_dealflow_sales_manager"/>
     <menuitem id="menu_dealflow_recurring_plans" name="Recurring Plans"
               parent="menu_dealflow_configuration"
               action="action_dealflow_recurring_plan" sequence="30"
