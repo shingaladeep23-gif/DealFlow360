@@ -110,7 +110,11 @@ def _ensure_home_action(env, users):
     )
     if not workspace:
         return
-    action_ref = "%s,%d" % (workspace._name, workspace.id)
+    # res.users.action_id is a Many2one to ir.actions.actions, NOT a reference
+    # field - ir.actions.client shares that table by inheritance, so the client
+    # action's own id IS the right value. Writing the "model,id" reference
+    # string that a reference field would take left the Home Action empty and
+    # everyone still landing on Discuss.
     targets = env["res.users"].browse()
     for user in users.values():
         targets |= user
@@ -118,8 +122,8 @@ def _ensure_home_action(env, users):
     if template:
         targets |= template
     for user in targets:
-        if user.action_id != workspace:
-            user.sudo().write({"action_id": action_ref})
+        if user.action_id.id != workspace.id:
+            user.sudo().write({"action_id": workspace.id})
 
 
 def _retire_personal_accounts(env):
@@ -149,6 +153,27 @@ def _retire_personal_accounts(env):
             values["customer_rank"] = 0
         if values:
             partner.sudo().write(values)
+
+
+def _retire_qa_scratch_products(env):
+    """Archive the throwaway products left behind by a manual QA session.
+
+    Live-found: 16 templates named "ZZ Audit Widget A", "ZZ D backorder",
+    "ZZ R monthly sub" and so on, all sitting in Odoo's default "All" category
+    and all created inside one afternoon of hand-testing. They are not
+    catalogue items - they outnumbered the real products two to one in the
+    product list, and they are the reason two thirds of the catalogue had no
+    description.
+
+    The "ZZ " prefix is the marker the person doing that testing chose
+    precisely so the rows would sort to the bottom and be identifiable later;
+    matching on it is narrow and deliberate. Archived, never deleted: the
+    quotations raised against them are real records with real history, and
+    those keep working with an archived product.
+    """
+    scratch = env["product.template"].search([("name", "=like", "ZZ %")])
+    if scratch:
+        scratch.sudo().write({"active": False})
 
 
 def _ensure_free_stock(env):
@@ -408,6 +433,7 @@ def seed_runtime_demo(env):
     17.0.1.2.0 and 17.0.1.6.0 migrations."""
     _ensure_company_branding(env)
     _retire_personal_accounts(env)
+    _retire_qa_scratch_products(env)
     users = _ensure_internal_users(env)
     _ensure_home_action(env, users)
     _ensure_portal_users(env)

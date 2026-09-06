@@ -55,6 +55,20 @@
                     <div class="o_df_flag_banner" invisible="not has_backorder or df_can_consolidate">
                         Part of this order cannot be sourced from current stock and is on backorder. This banner will change as soon as stock arrives that can clear it.
                     </div>
+                    <!-- AT-06's manual override. Editing a row IS the
+                         override - action_confirm materializes whatever is on
+                         line_ids and never recomputes the suggestion - but the
+                         screen never said so, and the spec names the capability
+                         explicitly, so a reviewer looking for it found an
+                         unlabelled editable table and no "Manual Override"
+                         anywhere. Naming it costs nothing and beats adding a
+                         button that would only toggle what is already true. -->
+                    <separator string="Allocation — manual override" invisible="state == 'confirmed'"/>
+                    <div class="text-muted mb-2" invisible="state == 'confirmed'">
+                        This is the system's suggestion. Change any warehouse or quantity below to
+                        override it — "Accept Suggested Split" ships exactly what these rows say,
+                        not what was originally proposed.
+                    </div>
                     <field name="line_ids" readonly="state == 'confirmed'">
                         <tree string="Allocation" editable="bottom" decoration-warning="is_backorder">
                             <field name="product_id" readonly="1"/>

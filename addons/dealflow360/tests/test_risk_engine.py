@@ -137,8 +137,17 @@ class TestRiskEngine(TransactionCase):
 
     def test_reference_price_without_pricelist_uses_list_price(self):
         """No pricelist on the order -> the DEC-009 degrade path: reference
-        price is the catalogue list_price, exactly as before this task."""
+        price is the catalogue list_price, exactly as before this task.
+
+        The pricelist is cleared explicitly rather than assumed absent. This
+        used to assert the order simply had none, which held only because the
+        database had no price lists at all - A2 now seeds real ones, and Odoo
+        creates a neutral default the moment the pricelist feature is enabled,
+        so every order picks one up. That neutral list carries no items and
+        therefore prices at list_price anyway; the branch under test here is
+        the one where there is genuinely no pricelist to consult."""
         order = self.env["sale.order"].create({"partner_id": self.acme.id})
+        order.pricelist_id = False
         self.assertFalse(order.pricelist_id)
         hw = self._make_product("No Pricelist HW", self.hardware, 1000.0)
         line = self._make_line(order, hw, 1, 15.0)

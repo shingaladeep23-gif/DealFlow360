@@ -241,18 +241,57 @@ def _ensure_second_currency(env):
     return eur
 
 
+def _ensure_base_pricelist(env):
+    """A neutral, item-less price list that prices at catalogue list price.
+
+    This is load-bearing, not decoration. A partner with no price list of their
+    own does not simply get list prices: res.partner._compute_product_pricelist
+    falls back to the FIRST price list by sequence, so the moment any list
+    exists it starts applying to everybody. Without a neutral list sorted ahead
+    of them, seeding A2's tier lists would quietly put every customer in the
+    database on a percentage discount - including the two the problem
+    statement's section 10 worked example depends on.
+
+    Odoo creates one of these itself when the price list feature is enabled, so
+    this usually finds it rather than adding another.
+    """
+    Pricelist = env["product.pricelist"]
+    existing = Pricelist.search(
+        [("currency_id", "=", env.company.currency_id.id)], order="sequence, id"
+    ).filtered(lambda p: not p.item_ids)[:1]
+    if existing:
+        if existing.sequence > 1:
+            existing.sequence = 1
+        return existing
+    return Pricelist.create(
+        {
+            "name": "Standard List Price",
+            "currency_id": env.company.currency_id.id,
+            "sequence": 1,
+        }
+    )
+
+
 def _ensure_pricelists(env, eur):
     """Tier pricing and a currency-specific list. The Price Lists menu opened
     an empty list before this, so neither half of A2's "customer tier based
     pricing, currency specific rules" was demonstrable."""
     Pricelist = env["product.pricelist"]
     Item = env["product.pricelist.item"]
+    _ensure_base_pricelist(env)
     created = {}
     for name, tier_key, percent in TIER_PRICELISTS:
         pricelist = Pricelist.search([("name", "=", name)], limit=1)
         if not pricelist:
             pricelist = Pricelist.create(
-                {"name": name, "currency_id": env.company.currency_id.id}
+                {
+                    "name": name,
+                    "currency_id": env.company.currency_id.id,
+                    # Explicitly behind the neutral list, so a tier list only
+                    # ever applies to a customer actually put on it - never as
+                    # the fallback for everyone else.
+                    "sequence": 30,
+                }
             )
         if not pricelist.item_ids:
             Item.create(
@@ -270,7 +309,9 @@ def _ensure_pricelists(env, eur):
         name = "Europe (EUR)"
         eur_list = Pricelist.search([("name", "=", name)], limit=1)
         if not eur_list:
-            eur_list = Pricelist.create({"name": name, "currency_id": eur.id})
+            eur_list = Pricelist.create(
+                {"name": name, "currency_id": eur.id, "sequence": 40}
+            )
         if not eur_list.item_ids:
             Item.create(
                 {
@@ -285,25 +326,40 @@ def _ensure_pricelists(env, eur):
     return created
 
 
-def _assign_pricelists_to_customers(env, pricelists):
-    """Put each demo customer on the price list its tier earns, so the tier on
-    the partner and the price they actually get are the same fact."""
-    tier_by_xmlid = {
-        "gold": "dealflow360.discount_tier_gold",
-        "silver": "dealflow360.discount_tier_silver",
-        "bronze": "dealflow360.discount_tier_bronze",
-    }
-    for tier_key, xmlid in tier_by_xmlid.items():
-        pricelist = pricelists.get(tier_key)
-        tier = env.ref(xmlid, raise_if_not_found=False)
-        if not pricelist or not tier:
-            continue
-        partners = env["res.partner"].search(
-            [("df_tier_id", "=", tier.id), ("is_company", "=", True)]
+def _ensure_tier_priced_customer(env, pricelists):
+    """A customer actually ON a tier price list, so A2's "customer tier based
+    pricing" is a live record rather than an unused configuration screen.
+
+    Deliberately a THIRD customer rather than putting Acme and Beta on the
+    lists their tiers earn. A tier price list knocks a percentage off every
+    list price, which silently re-prices every quotation those two appear in -
+    including the problem statement's own section 10 worked example (Gold
+    customer, laptop at 12% against a 15% ceiling), which is verified against
+    the spec's stated numbers and has to keep matching them. Tier pricing is
+    demonstrated on a customer whose arithmetic nothing else depends on; Acme
+    and Beta stay on plain list pricing, and either can be moved onto a list
+    from the partner form in one click.
+    """
+    pricelist = pricelists.get("bronze")
+    tier = env.ref("dealflow360.discount_tier_bronze", raise_if_not_found=False)
+    if not pricelist or not tier:
+        return env["res.partner"]
+    partner = env["res.partner"].search(
+        [("name", "=", "Cascadia Systems"), ("is_company", "=", True)], limit=1
+    )
+    if not partner:
+        partner = env["res.partner"].create(
+            {
+                "name": "Cascadia Systems",
+                "is_company": True,
+                "customer_rank": 1,
+                "email": "accounts@cascadia-systems.example",
+                "df_tier_id": tier.id,
+            }
         )
-        for partner in partners:
-            if partner.property_product_pricelist != pricelist:
-                partner.property_product_pricelist = pricelist.id
+    if partner.property_product_pricelist != pricelist:
+        partner.property_product_pricelist = pricelist.id
+    return partner
 
 
 def _describe_original_products(env):
@@ -331,4 +387,4 @@ def seed_catalog(env):
     _ensure_taxes_on_products(env)
     eur = _ensure_second_currency(env)
     pricelists = _ensure_pricelists(env, eur)
-    _assign_pricelists_to_customers(env, pricelists)
+    _ensure_tier_priced_customer(env, pricelists)
