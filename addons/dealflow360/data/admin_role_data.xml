@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Live-reproduced demo bug: logging in as Odoo's built-in `admin`
+             account and opening a quotation raised
+
+               AccessError: You are not allowed to access
+               'DealFlow360 Audit Log' (dealflow.audit.log) records.
+               This operation is allowed for the following groups:
+                 - DealFlow360/Admin  - DealFlow360/Finance
+                 - DealFlow360/Sales Manager  - DealFlow360/Sales Rep
+
+             which reads like a contradiction ("but I AM the admin") and is
+             not. Two separate facts combine:
+
+             1. base.user_admin held NO DealFlow360 role. group_dealflow_admin
+                implies base.group_system, but implication does not run
+                backwards - being a system administrator never made anybody a
+                DealFlow360 Admin. Only the demo user df.admin was ever given
+                the role (demo/demo_runtime.py INTERNAL_USERS).
+
+             2. base.group_system does NOT bypass ir.model.access. Only the
+                real superuser does (env.su / sudo() / OdooBot). So `admin`
+                had read rights on none of the dealflow.* models.
+
+             The quotation form shows df_audit_log_ids and
+             df_billing_schedule_ids, so the AccessError fires on form load -
+             before the user can type anything. The ORM create() itself
+             succeeded, which is why this only ever showed up in the UI: the
+             governance fields that read dealflow.discount.tier are stored
+             computes, and stored computes default to compute_sudo=True.
+
+             Fix: give the built-in administrator the DealFlow360 Admin role
+             it should always have had. It grants nothing base.group_system
+             did not already carry - group_dealflow_admin implies
+             base.group_system, and admin holds that already.
+
+             <function> rather than <record id="base.user_admin">: that
+             ir.model.data row is flagged noupdate, so a record override is
+             silently skipped on both install and upgrade. A function call
+             always executes, and (4, ref(...)) is add-if-missing, so
+             re-running `-u dealflow360` is idempotent. -->
+        <function model="res.users" name="write">
+            <value model="res.users" eval="[ref('base.user_admin')]"/>
+            <value eval="{'groups_id': [(4, ref('dealflow360.group_dealflow_admin'))]}"/>
+        </function>
+    </data>
+</odoo>

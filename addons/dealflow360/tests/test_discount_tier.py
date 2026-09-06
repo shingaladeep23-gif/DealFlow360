@@ -47,13 +47,25 @@ class TestDiscountTierFoundation(TransactionCase):
                 ("location_id", "in", warehouses.mapped("lot_stock_id").ids),
             ]
         )
-        per_warehouse_qty = {
-            quant.location_id.warehouse_id.name: quant.quantity for quant in quants
-        }
+        # FREE quantity, not raw on-hand. Every other consumer of this stock
+        # reasons in quantity - reserved_quantity: the DF-010 split engine,
+        # _df_health_signal_delivery_risk(), and the demo seeder itself, which
+        # tops FREE stock up to 6 at Main and 4 at East. Asserting raw
+        # `quantity` only held on a virgin database - once the seeded demo
+        # orders confirm and reserve units, the seeder correctly raises on-hand
+        # to keep free stock at target (Main 12 on-hand / 6 reserved) and this
+        # test failed at 12.0 < 10.0 while the fragmentation it exists to
+        # protect was perfectly intact.
+        per_warehouse_free = {}
+        for quant in quants:
+            name = quant.location_id.warehouse_id.name
+            per_warehouse_free[name] = per_warehouse_free.get(name, 0.0) + (
+                quant.quantity - quant.reserved_quantity
+            )
         # Load-bearing for DF-010: no single warehouse can cover a 10-unit order.
-        for qty in per_warehouse_qty.values():
+        for qty in per_warehouse_free.values():
             self.assertLess(qty, 10.0)
-        self.assertGreaterEqual(sum(per_warehouse_qty.values()), 10.0)
+        self.assertGreaterEqual(sum(per_warehouse_free.values()), 10.0)
 
 
 @tagged("post_install", "-at_install")
