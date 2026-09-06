@@ -10,5 +10,20 @@
             <field name="interval_type">days</field>
             <field name="active" eval="True"/>
         </record>
+
+        <!-- A notice period is the one part of a cancellation that cannot
+             happen when somebody clicks Cancel: the subscription stays live
+             and keeps billing until the notice runs out, and only then is it
+             closed, refunded and charged any termination fee. Nothing else in
+             the system watches the calendar for that date. -->
+        <record id="ir_cron_close_expired_subscriptions" model="ir.cron">
+            <field name="name">DealFlow360: Close subscriptions whose notice period has run out</field>
+            <field name="model_id" ref="sale.model_sale_order_line"/>
+            <field name="state">code</field>
+            <field name="code">model._cron_close_expired_subscriptions()</field>
+            <field name="interval_number">1</field>
+            <field name="interval_type">days</field>
+            <field name="active" eval="True"/>
+        </record>
     </data>
 </odoo>

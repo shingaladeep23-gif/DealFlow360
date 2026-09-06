@@ -76,6 +76,37 @@ class DealflowRecurringPlan(models.Model):
         help="What happens to the current, already-invoiced period when a "
         "subscription line on this plan is cancelled mid-cycle.",
     )
+    # A5 asks for "cancellation and partial refund rules" to be CONFIGURABLE.
+    # cancel_rule alone is a two-option yes/no, which cannot express any of the
+    # terms a real subscription contract actually turns on - how much of the
+    # unused period comes back, whether leaving early costs anything, and how
+    # much notice the customer owes. All three below have real effects in
+    # sale.order.line._df_close_subscription; none of them is a label.
+    cancel_refund_pct = fields.Float(
+        string="Refund of Unused Period (%)",
+        default=100.0,
+        help="How much of the unused remainder of the current period is "
+        "actually credited back, when the rule above is 'Credit Note for "
+        "Unused Period'. 100% refunds the whole unused portion; 50% is a "
+        "half-refund; 0% behaves as no refund. Only meaningful for the "
+        "prorated-refund rule.",
+    )
+    cancel_fee = fields.Float(
+        string="Early Termination Fee",
+        default=0.0,
+        help="A flat fee charged when a subscription on this plan is "
+        "cancelled. Raised as a real invoice at the moment the subscription "
+        "closes, so it is never silently swallowed by the cancellation.",
+    )
+    cancel_notice_days = fields.Integer(
+        string="Notice Period (days)",
+        default=0,
+        help="How much notice the customer owes. With a notice period the "
+        "subscription does not stop on the day it is cancelled: it stays "
+        "live - and keeps billing - until the notice runs out, and only then "
+        "is it closed, refunded and charged any termination fee. Zero means "
+        "cancellation takes effect immediately.",
+    )
     active = fields.Boolean(default=True)
 
     def write(self, vals):
@@ -506,31 +537,112 @@ class SaleOrderLineSubscription(models.Model):
         return True
 
     def action_cancel_subscription(self):
-        """Cancel future billing for a recurring line per its plan's
-        cancel_rule; on prorate_refund, credits the unused remainder of
-        the most recently invoiced period (AT-07)."""
+        """Cancel a recurring line under its plan's cancellation terms.
+
+        With no notice period this closes the subscription immediately, as it
+        always did. With one, the subscription stays LIVE and keeps billing
+        until the notice runs out - which is the whole point of a notice
+        period, and is settled by _cron_close_expired_subscriptions.
+        """
         for line in self:
             if not line.product_id.df_is_recurring or line.df_sub_state == "cancelled":
                 continue
             plan = line.product_id.df_recurring_plan_id
             today = fields.Date.context_today(self)
+            notice_days = plan.cancel_notice_days if plan else 0
+            end_date = today + relativedelta(days=max(0, notice_days))
+            # Cycles that fall beyond the notice period are never owed.
             line.billing_schedule_ids.filtered(
-                lambda s: s.state == "pending"
-            ).write({"state": "cancelled"})
-            if plan and plan.cancel_rule == "prorate_refund":
-                last_invoiced = line.billing_schedule_ids.filtered(
-                    lambda s: s.state == "invoiced"
-                    and not s.df_is_proration
-                    and s.invoice_id
-                    and s.invoice_id.state == "posted"
-                ).sorted("date", reverse=True)[:1]
-                if last_invoiced:
-                    last_invoiced._create_proration_credit_note(today)
-            line.write({"df_sub_state": "cancelled", "df_sub_end_date": today})
-            line.order_id.message_post(
-                body=_("Subscription for %s cancelled.") % line.product_id.display_name
-            )
+                lambda s: s.state == "pending" and s.date > end_date
+            ).sudo().write({"state": "cancelled"})
+            if end_date > today:
+                line.write({"df_sub_end_date": end_date})
+                line.order_id.message_post(
+                    body=_(
+                        "Subscription for %(product)s cancelled, effective "
+                        "%(date)s after its %(days)d-day notice period. It "
+                        "continues to bill until then."
+                    )
+                    % {
+                        "product": line.product_id.display_name,
+                        "date": end_date,
+                        "days": notice_days,
+                    }
+                )
+                continue
+            line._df_close_subscription(end_date)
         return True
+
+    def _df_close_subscription(self, end_date):
+        """Actually end the subscription: stop every remaining cycle, settle
+        the refund the plan promises, and charge any termination fee."""
+        self.ensure_one()
+        plan = self.product_id.df_recurring_plan_id
+        self.billing_schedule_ids.filtered(
+            lambda s: s.state == "pending"
+        ).sudo().write({"state": "cancelled"})
+
+        if (
+            plan
+            and plan.cancel_rule == "prorate_refund"
+            and plan.cancel_refund_pct > 0
+        ):
+            last_invoiced = self.billing_schedule_ids.filtered(
+                lambda s: s.state == "invoiced"
+                and not s.df_is_proration
+                and s.invoice_id
+                and s.invoice_id.state == "posted"
+            ).sorted("date", reverse=True)[:1]
+            if last_invoiced:
+                last_invoiced._create_proration_credit_note(
+                    end_date, refund_pct=plan.cancel_refund_pct
+                )
+
+        if plan and plan.cancel_fee > 0:
+            fee = self.env["dealflow.billing.schedule"].sudo().create(
+                {
+                    "order_id": self.order_id.id,
+                    "order_line_id": self.id,
+                    "date": end_date,
+                    "amount": plan.cancel_fee,
+                    "state": "pending",
+                    "df_is_cancellation_fee": True,
+                }
+            )
+            # Invoiced here rather than queued for the cron. The cron cancels
+            # any pending entry whose line is no longer active, and this line
+            # is about to stop being active - a termination fee that quietly
+            # cancels itself is not a fee.
+            fee._create_invoice()
+            self.order_id.message_post(
+                body=_("Early termination fee of %(amount).2f charged on %(product)s.")
+                % {"amount": plan.cancel_fee, "product": self.product_id.display_name}
+            )
+
+        self.write({"df_sub_state": "cancelled", "df_sub_end_date": end_date})
+        self.order_id.message_post(
+            body=_("Subscription for %s cancelled.") % self.product_id.display_name
+        )
+        return True
+
+    @api.model
+    def _cron_close_expired_subscriptions(self):
+        """Close subscriptions whose notice period has run out.
+
+        A notice period is the one part of a cancellation that cannot happen
+        at the moment somebody clicks Cancel - it happens later, and nothing
+        else in the system is watching the calendar for it.
+        """
+        today = fields.Date.context_today(self)
+        expiring = self.search(
+            [
+                ("df_sub_state", "=", "active"),
+                ("df_sub_end_date", "!=", False),
+                ("df_sub_end_date", "<=", today),
+            ]
+        )
+        for line in expiring:
+            line._df_close_subscription(line.df_sub_end_date)
 
 
 class DealflowBillingSchedule(models.Model):
@@ -565,8 +677,14 @@ class DealflowBillingSchedule(models.Model):
     invoice_id = fields.Many2one("account.move", string="Invoice", readonly=True)
     df_is_proration = fields.Boolean(
         string="Is Proration",
-        help="True for an extra entry raised by a mid-cycle quantity "
-        "change rather than a regular full-cycle bill.",
+        help="True for an extra entry raised by a mid-cycle change rather "
+        "than a regular full-cycle bill.",
+    )
+    df_is_cancellation_fee = fields.Boolean(
+        string="Is Termination Fee",
+        help="True for the one-off early-termination fee a plan charges when "
+        "a subscription is cancelled. Like a proration it is a settlement, "
+        "not a cycle, so it never queues a successor.",
     )
 
     def action_invoice_now(self):
@@ -601,7 +719,7 @@ class DealflowBillingSchedule(models.Model):
             self.write({"state": "cancelled"})
             return False
         self._create_invoice()
-        if not self.df_is_proration:
+        if not self.df_is_proration and not self.df_is_cancellation_fee:
             line._df_schedule_next_bill(self.date)
         return True
 
@@ -655,9 +773,15 @@ class DealflowBillingSchedule(models.Model):
         self.write({"state": "invoiced", "invoice_id": move.id})
         return move
 
-    def _create_proration_credit_note(self, today):
+    def _create_proration_credit_note(self, today, refund_pct=100.0):
         """cancel_rule=prorate_refund: credit the unused remainder of this
-        (already invoiced, posted) period."""
+        (already invoiced, posted) period, less whatever the plan withholds.
+
+        `refund_pct` is dealflow.recurring.plan.cancel_refund_pct - A5's
+        "partial refund rules". 100 credits the whole unused portion, 50 half
+        of it. It scales the same fraction the time-proration produces, so the
+        two compose rather than fighting each other.
+        """
         self.ensure_one()
         if not self.invoice_id or self.invoice_id.state != "posted":
             return False
@@ -665,28 +789,38 @@ class DealflowBillingSchedule(models.Model):
         cycle_days = DAYS_PER_INTERVAL.get(plan.interval if plan else "monthly", 30)
         elapsed = (today - self.date).days if self.date else cycle_days
         unused_fraction = min(1.0, max(0.0, (cycle_days - elapsed) / float(cycle_days)))
-        if unused_fraction <= 0:
+        refund_fraction = unused_fraction * (
+            min(100.0, max(0.0, refund_pct)) / 100.0
+        )
+        if refund_fraction <= 0:
             return False
-        credit_amount = self.amount * unused_fraction
+        credit_amount = self.amount * refund_fraction
         if credit_amount < 0.005:
             return False
         credit_note = self.invoice_id._reverse_moves(
             default_values_list=[
                 {
                     "invoice_date": today,
+                    # Without invoice_origin the credit note carried no link
+                    # back to the deal at all: it was a posted RINV sitting in
+                    # the journal with nothing tying it to the order whose
+                    # cancellation produced it, so tracing one meant working
+                    # backwards through reversed_entry_id by hand.
+                    "invoice_origin": self.order_id.name,
                     "ref": _(
-                        "Prorated credit - subscription cancelled mid-cycle"
-                    ),
+                        "Prorated credit - subscription cancelled mid-cycle (%s)"
+                    )
+                    % self.order_id.name,
                 }
             ],
             cancel=False,
         )
         # A straight reversal credits the FULL invoiced amount; scale every
-        # line down to the unused fraction so the credit matches the unused
-        # remainder of the cycle, not the whole period.
-        if unused_fraction < 1.0:
+        # line down so the credit matches the unused remainder of the cycle
+        # (and the plan's refund percentage), not the whole period.
+        if refund_fraction < 1.0:
             for cline in credit_note.invoice_line_ids:
-                cline.quantity = cline.quantity * unused_fraction
+                cline.quantity = cline.quantity * refund_fraction
         credit_note.action_post()
         self.order_id.message_post(
             body=_(

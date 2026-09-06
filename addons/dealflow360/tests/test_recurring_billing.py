@@ -353,6 +353,126 @@ class TestRecurringBilling(TransactionCase):
         pending_before.invalidate_recordset()
         self.assertEqual(pending_before.state, "cancelled")
 
+    # -- A5: configurable cancellation and PARTIAL refund rules --------------
+    #
+    # cancel_rule alone was a two-option dropdown, which cannot express any of
+    # the terms a subscription contract actually turns on. All three settings
+    # below have real effects, not labels.
+
+    def _invoiced_entry(self, line):
+        return line.billing_schedule_ids.filtered(lambda s: s.state == "invoiced")
+
+    def test_partial_refund_percentage_credits_only_that_share(self):
+        plan = self.env["dealflow.recurring.plan"].create(
+            {
+                "name": "Half Refund Plan",
+                "interval": "monthly",
+                "cancel_rule": "prorate_refund",
+                "cancel_refund_pct": 50.0,
+            }
+        )
+        product = self._make_recurring_product("Half Refund Product", 300.0, plan=plan)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        self.env["dealflow.billing.schedule"]._cron_generate_recurring_invoices()
+        invoiced = self._invoiced_entry(line)
+        original = invoiced.invoice_id
+        # Half the cycle used up, so half is unused; the plan refunds half of
+        # that half.
+        invoiced.date = invoiced.date - timedelta(days=15)
+
+        line.action_cancel_subscription()
+
+        credit = self.env["account.move"].search(
+            [("reversed_entry_id", "=", original.id), ("move_type", "=", "out_refund")]
+        )
+        self.assertEqual(len(credit), 1)
+        self.assertAlmostEqual(
+            credit.amount_untaxed, original.amount_untaxed * 0.25, places=2
+        )
+
+    def test_credit_note_traces_back_to_its_order(self):
+        product = self._make_recurring_product("Traceable Refund", 300.0)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+        self.env["dealflow.billing.schedule"]._cron_generate_recurring_invoices()
+        invoiced = self._invoiced_entry(line)
+        invoiced.date = invoiced.date - timedelta(days=15)
+
+        line.action_cancel_subscription()
+
+        credit = self.env["account.move"].search(
+            [
+                ("reversed_entry_id", "=", invoiced.invoice_id.id),
+                ("move_type", "=", "out_refund"),
+            ]
+        )
+        self.assertEqual(
+            credit.invoice_origin,
+            order.name,
+            "a credit note with no origin cannot be traced back to its deal",
+        )
+
+    def test_early_termination_fee_raises_a_real_invoice(self):
+        plan = self.env["dealflow.recurring.plan"].create(
+            {
+                "name": "Fee Plan",
+                "interval": "monthly",
+                "cancel_rule": "no_refund",
+                "cancel_fee": 250.0,
+            }
+        )
+        product = self._make_recurring_product("Fee Product", 400.0, plan=plan)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+
+        line.action_cancel_subscription()
+
+        fee_entry = line.billing_schedule_ids.filtered("df_is_cancellation_fee")
+        self.assertEqual(len(fee_entry), 1)
+        self.assertEqual(
+            fee_entry.state,
+            "invoiced",
+            "a termination fee that cancels itself is not a fee",
+        )
+        self.assertEqual(fee_entry.invoice_id.state, "posted")
+        self.assertAlmostEqual(fee_entry.invoice_id.amount_untaxed, 250.0, places=2)
+
+    def test_notice_period_keeps_the_subscription_billing_until_it_expires(self):
+        plan = self.env["dealflow.recurring.plan"].create(
+            {
+                "name": "Notice Plan",
+                "interval": "monthly",
+                "cancel_rule": "no_refund",
+                "cancel_notice_days": 30,
+            }
+        )
+        product = self._make_recurring_product("Notice Product", 500.0, plan=plan)
+        order, line = self._make_order(product, qty=1)
+        order.action_confirm()
+
+        line.action_cancel_subscription()
+
+        self.assertEqual(
+            line.df_sub_state,
+            "active",
+            "a notice period the customer owes must keep billing",
+        )
+        self.assertEqual(
+            line.df_sub_end_date, line.df_sub_start_date + timedelta(days=30)
+        )
+        self.assertTrue(self._pending_cycles(line), "the next cycle is still owed")
+
+        # Nothing closes while the notice still has time to run.
+        self.env["sale.order.line"]._cron_close_expired_subscriptions()
+        self.assertEqual(line.df_sub_state, "active")
+
+        # Once it expires, the cron closes it for real.
+        line.df_sub_end_date = line.df_sub_start_date
+        self.env["sale.order.line"]._cron_close_expired_subscriptions()
+        self.assertEqual(line.df_sub_state, "cancelled")
+        self.assertFalse(self._pending_cycles(line))
+
     # -- editing a live subscription must reach the SCHEDULE, not just the line
     #
     # Every test below reproduces a way the schedule used to drift away from
