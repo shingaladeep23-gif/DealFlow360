@@ -6,7 +6,12 @@
             <field name="model_id" ref="sale.model_sale_order"/>
             <field name="state">code</field>
             <field name="code">model._cron_compute_deal_health()</field>
-            <field name="interval_number">6</field>
+            <!-- Hourly, not every six hours. Two of DEC-005's four signals are
+                 functions of wall-clock time and nothing else recomputes them,
+                 so the gap between runs is exactly how long a newly created
+                 deal sits on the Deal Health screen with no score at all.
+                 Live-found at 10 of 37 orders scored. -->
+            <field name="interval_number">1</field>
             <field name="interval_type">hours</field>
             <field name="active" eval="True"/>
         </record>
